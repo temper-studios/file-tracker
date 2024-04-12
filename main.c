@@ -7,9 +7,9 @@
 
 typedef void fs_can_abort;
 
-#define FS_MAX_PATH 256
+#define FIT_MAX_PATH 256
 
-void FS_Log(const char *format, ...) {
+void FIT_Log(const char *format, ...) {
 	va_list args = {0};
 	va_start(args, format);
 	vfprintf(stdout, format, args);
@@ -17,7 +17,7 @@ void FS_Log(const char *format, ...) {
 	fprintf(stdout, "\n");
 }
 
-void FS_AbortWithMessage(const char *format, ...) {
+void FIT_AbortWithMessage(const char *format, ...) {
 	va_list args = {0};
 	va_start(args, format);
 	vfprintf(stdout, format, args);
@@ -25,40 +25,40 @@ void FS_AbortWithMessage(const char *format, ...) {
 	exit(0);
 }
 
-#define FS_RELEASE_ASSERT(condition, format, ...) if (!(condition)) FS_AbortWithMessage(format, __VA_ARGS__)
-#define FS_DEBUG_ASSERT(condition, format, ...) assert(condition)
-#define FS_SHOULD_NOT_BE_NULL(condition) FS_DEBUG_ASSERT(condition, "")
-#define FS_ABORT_WITH_MESSAGE(format, ...) FS_AbortWithMessage(format, __VA_ARGS__)
-#define FS_ASSERT_LOG_RETURN(condition, format, ...) if (!(condition)) { FS_Log(format, __VA_ARGS__); return 0; }
-#define FS_LOG(format, ...) FS_Log(format, __VA_ARGS__)
+#define FIT_RELEASE_ASSERT(condition, format, ...) if (!(condition)) FIT_AbortWithMessage(format, __VA_ARGS__)
+#define FIT_DEBUG_ASSERT(condition, format, ...) assert(condition)
+#define FIT_SHOULD_NOT_BE_NULL(condition) FIT_DEBUG_ASSERT(condition, "")
+#define FIT_ABORT_WITH_MESSAGE(format, ...) FIT_AbortWithMessage(format, __VA_ARGS__)
+#define FIT_ASSERT_LOG_RETURN(condition, format, ...) if (!(condition)) { FIT_Log(format, __VA_ARGS__); return 0; }
+#define FIT_LOG(format, ...) FIT_Log(format, __VA_ARGS__)
 
 // SHA-1 constants
-#define FS_SHA1_BLOCK_SIZE 64
+#define FIT_SHA1_BLOCK_SIZE 64
 // this is an 160 bit number
-#define FS_SHA1_DIGEST_SIZE 20
+#define FIT_SHA1_DIGEST_SIZE 20
 // 20 bytes (160 bits) => 28 characters in Base64
-#define FS_BASE64_DIGEST_SIZE 64
-#define FS_BASE64_OUTPUT_STR_SIZE (4 * ((FS_SHA1_DIGEST_SIZE + 2) / 3)) 
+#define FIT_BASE64_DIGEST_SIZE 64
+#define FIT_BASE64_OUTPUT_STR_SIZE (4 * ((FIT_SHA1_DIGEST_SIZE + 2) / 3)) 
 
 // Base64 encoding lookup table
-static const char FS_BASE64_TABLE[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static const char FIT_BASE64_TABLE[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-typedef struct FS_Sha1Digest {
-	uint8_t bytes[FS_SHA1_DIGEST_SIZE];
-} FS_Sha1Digest;
+typedef struct FIT_Sha1Digest {
+	uint8_t bytes[FIT_SHA1_DIGEST_SIZE];
+} FIT_Sha1Digest;
 
-typedef struct FS_Base64Digest {
-	char buffer[FS_BASE64_DIGEST_SIZE];
-} FS_Base64Digest;
+typedef struct FIT_Base64Digest {
+	char buffer[FIT_BASE64_DIGEST_SIZE];
+} FIT_Base64Digest;
 
-void FS_DigestToBase64(FS_Sha1Digest *input, FS_Base64Digest *output) {
-	FS_SHOULD_NOT_BE_NULL(input);
-	FS_SHOULD_NOT_BE_NULL(output);
+void FIT_DigestToBase64(FIT_Sha1Digest *input, FIT_Base64Digest *output) {
+	FIT_SHOULD_NOT_BE_NULL(input);
+	FIT_SHOULD_NOT_BE_NULL(output);
 
-	size_t input_len = FS_SHA1_DIGEST_SIZE;
-	size_t output_len = FS_BASE64_OUTPUT_STR_SIZE;
+	size_t input_len = FIT_SHA1_DIGEST_SIZE;
+	size_t output_len = FIT_BASE64_OUTPUT_STR_SIZE;
 
-	FS_DEBUG_ASSERT(output_len < FS_BASE64_DIGEST_SIZE);
+	FIT_DEBUG_ASSERT(output_len < FIT_BASE64_DIGEST_SIZE);
 
 	for (size_t i = 0, j = 0; i < input_len;) {
 		uint32_t octet_a = (i < input_len) ? input->bytes[i++] : 0;
@@ -67,10 +67,10 @@ void FS_DigestToBase64(FS_Sha1Digest *input, FS_Base64Digest *output) {
 
 		uint32_t triple = (octet_a << 16) | (octet_b << 8) | octet_c;
 
-		output->buffer[j++] = FS_BASE64_TABLE[(triple >> 18) & 0x3F];
-		output->buffer[j++] = FS_BASE64_TABLE[(triple >> 12) & 0x3F];
-		output->buffer[j++] = FS_BASE64_TABLE[(triple >> 6) & 0x3F];
-		output->buffer[j++] = FS_BASE64_TABLE[triple & 0x3F];
+		output->buffer[j++] = FIT_BASE64_TABLE[(triple >> 18) & 0x3F];
+		output->buffer[j++] = FIT_BASE64_TABLE[(triple >> 12) & 0x3F];
+		output->buffer[j++] = FIT_BASE64_TABLE[(triple >> 6) & 0x3F];
+		output->buffer[j++] = FIT_BASE64_TABLE[triple & 0x3F];
 	}
 
 	// Add padding characters if necessary
@@ -85,11 +85,11 @@ void FS_DigestToBase64(FS_Sha1Digest *input, FS_Base64Digest *output) {
 	output->buffer[output_len] = '\0'; // Null-terminate the output string
 }
 
-void FS_DoSha1(const char *message, size_t messageLen, FS_Sha1Digest *digest) {
-	FS_SHOULD_NOT_BE_NULL(message);
-	FS_SHOULD_NOT_BE_NULL(digest);
+void FIT_DoSha1(const char *message, size_t messageLen, FIT_Sha1Digest *digest) {
+	FIT_SHOULD_NOT_BE_NULL(message);
+	FIT_SHOULD_NOT_BE_NULL(digest);
 
-	memset(digest->bytes, 0, FS_SHA1_DIGEST_SIZE);
+	memset(digest->bytes, 0, FIT_SHA1_DIGEST_SIZE);
 
 	uint32_t h[] = {
 		0x67452301,
@@ -101,8 +101,8 @@ void FS_DoSha1(const char *message, size_t messageLen, FS_Sha1Digest *digest) {
 	// Break up message into 512 bit blocks (64 bytes the SHA1_BLOCK_SIZE)
 
 	size_t blockCount = ((messageLen + 8) / 64) + 1;
-	uint8_t *messageBlocks = (uint8_t *)calloc(blockCount, FS_SHA1_BLOCK_SIZE);
-	FS_RELEASE_ASSERT(messageBlocks, "Out of memory when allocating SHA1 block.");
+	uint8_t *messageBlocks = (uint8_t *)calloc(blockCount, FIT_SHA1_BLOCK_SIZE);
+	FIT_RELEASE_ASSERT(messageBlocks, "Out of memory when allocating SHA1 block.");
 
 	memcpy(messageBlocks, message, messageLen);
 
@@ -125,9 +125,9 @@ void FS_DoSha1(const char *message, size_t messageLen, FS_Sha1Digest *digest) {
 		((bitLength << 40) & 0xFF000000000000) |
 		((bitLength << 56) & 0xFF00000000000000);
 
-	memcpy(&messageBlocks[(blockCount * FS_SHA1_BLOCK_SIZE) - sizeof(bitLengthBigEndian)], &bitLengthBigEndian, sizeof(bitLengthBigEndian));
+	memcpy(&messageBlocks[(blockCount * FIT_SHA1_BLOCK_SIZE) - sizeof(bitLengthBigEndian)], &bitLengthBigEndian, sizeof(bitLengthBigEndian));
 
-#define FS_SHA1_ROTL32(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
+#define FIT_SHA1_ROTL32(value, bits) (((value) << (bits)) | ((value) >> (32 - (bits))))
 
 	uint32_t w[80] = {0};
 
@@ -147,7 +147,7 @@ void FS_DoSha1(const char *message, size_t messageLen, FS_Sha1Digest *digest) {
 
 		// then extend this to 80 32 bit words
 		for (int i = 16; i < 80; ++i) {
-			w[i] = FS_SHA1_ROTL32(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+			w[i] = FIT_SHA1_ROTL32(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
 		}
 
 		//Initialize hash value for this chunk:
@@ -176,10 +176,10 @@ void FS_DoSha1(const char *message, size_t messageLen, FS_Sha1Digest *digest) {
 				k = 0xCA62C1D6;
 			}
 
-			uint32_t temp = FS_SHA1_ROTL32(a, 5) + f + e + k + w[i];
+			uint32_t temp = FIT_SHA1_ROTL32(a, 5) + f + e + k + w[i];
 			e = d;
 			d = c;
-			c = FS_SHA1_ROTL32(b, 30);
+			c = FIT_SHA1_ROTL32(b, 30);
 			b = a;
 			a = temp;
 		}
@@ -201,81 +201,81 @@ void FS_DoSha1(const char *message, size_t messageLen, FS_Sha1Digest *digest) {
 
 	free(messageBlocks);
 
-#undef FS_SHA1_ROTL32
+#undef FIT_SHA1_ROTL32
 }
 
-fs_can_abort FS_Sha1Test() {
-	const size_t FS_MAX_MESSAGE_LENGTH = 1024;
+fs_can_abort FIT_Sha1Test() {
+	const size_t FIT_MAX_MESSAGE_LENGTH = 1024;
 	{
-		FS_Sha1Digest digest = {0};
-		FS_DoSha1("", 0, &digest);
-		FS_Base64Digest base64Digest = {0};
-		FS_DigestToBase64(&digest, &base64Digest);
-		FS_RELEASE_ASSERT(strcmp(base64Digest.buffer, "2jmj7l5rSw0yVb/vlWAYkK/YBwk=") == 0, " Sha1 test failed");
+		FIT_Sha1Digest digest = {0};
+		FIT_DoSha1("", 0, &digest);
+		FIT_Base64Digest base64Digest = {0};
+		FIT_DigestToBase64(&digest, &base64Digest);
+		FIT_RELEASE_ASSERT(strcmp(base64Digest.buffer, "2jmj7l5rSw0yVb/vlWAYkK/YBwk=") == 0, " Sha1 test failed");
 	}
 	{
 		const char message[] = "The quick brown fox jumps over the lazy dog";
-		FS_Sha1Digest digest = {0};
-		FS_DoSha1(message, strlen(message), &digest);
-		FS_Base64Digest base64Digest;
-		FS_DigestToBase64(&digest, &base64Digest);
-		FS_RELEASE_ASSERT(strcmp(base64Digest.buffer, "L9ThxnotKPzthJ7hu3bnORuT6xI=") == 0, " Sha1 test failed");
+		FIT_Sha1Digest digest = {0};
+		FIT_DoSha1(message, strlen(message), &digest);
+		FIT_Base64Digest base64Digest;
+		FIT_DigestToBase64(&digest, &base64Digest);
+		FIT_RELEASE_ASSERT(strcmp(base64Digest.buffer, "L9ThxnotKPzthJ7hu3bnORuT6xI=") == 0, " Sha1 test failed");
 	}
 	{
 		const char message[] = "The quick brown fox jumps over the lazy cog";
-		FS_Sha1Digest digest = {0};
-		FS_DoSha1(message, strlen(message), &digest);
-		FS_Base64Digest base64Digest;
-		FS_DigestToBase64(&digest, &base64Digest);
-		FS_RELEASE_ASSERT(strcmp(base64Digest.buffer, "3p8sf9JeGzr60+haC9F9mxANtLM=") == 0, " Sha1 test failed");
+		FIT_Sha1Digest digest = {0};
+		FIT_DoSha1(message, strlen(message), &digest);
+		FIT_Base64Digest base64Digest;
+		FIT_DigestToBase64(&digest, &base64Digest);
+		FIT_RELEASE_ASSERT(strcmp(base64Digest.buffer, "3p8sf9JeGzr60+haC9F9mxANtLM=") == 0, " Sha1 test failed");
 	}
 	{
 		const char message[] = "dGhlIHNhbXBsZSBub25jZQ==";
-		FS_Sha1Digest digest = {0};
-		FS_DoSha1(message, strlen(message), &digest);
-		FS_Base64Digest base64Digest;
-		FS_DigestToBase64(&digest, &base64Digest);
-		FS_RELEASE_ASSERT(strcmp(base64Digest.buffer, "hHLtf2V1k8aDQZfNjw3Ia1hCwt0=") == 0, " Sha1 test failed");
+		FIT_Sha1Digest digest = {0};
+		FIT_DoSha1(message, strlen(message), &digest);
+		FIT_Base64Digest base64Digest;
+		FIT_DigestToBase64(&digest, &base64Digest);
+		FIT_RELEASE_ASSERT(strcmp(base64Digest.buffer, "hHLtf2V1k8aDQZfNjw3Ia1hCwt0=") == 0, " Sha1 test failed");
 	}
 	{
 		const char message[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-		FS_Sha1Digest digest = {0};
-		FS_DoSha1(message, strlen(message), &digest);
-		FS_Base64Digest base64Digest;
-		FS_DigestToBase64(&digest, &base64Digest);
-		FS_RELEASE_ASSERT(strcmp(base64Digest.buffer, "Kfh9QIsMVZcl6xEPYxPHzW8SZ8w=") == 0, " Sha1 test failed");
+		FIT_Sha1Digest digest = {0};
+		FIT_DoSha1(message, strlen(message), &digest);
+		FIT_Base64Digest base64Digest;
+		FIT_DigestToBase64(&digest, &base64Digest);
+		FIT_RELEASE_ASSERT(strcmp(base64Digest.buffer, "Kfh9QIsMVZcl6xEPYxPHzW8SZ8w=") == 0, " Sha1 test failed");
 	}
 	{
 		const char message[] = "dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-		FS_Sha1Digest digest = {0};
-		FS_DoSha1(message, strlen(message), &digest);
-		FS_Base64Digest base64Digest;
-		FS_DigestToBase64(&digest, &base64Digest);
-		FS_RELEASE_ASSERT(strcmp(base64Digest.buffer, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=") == 0, " Sha1 test failed");
+		FIT_Sha1Digest digest = {0};
+		FIT_DoSha1(message, strlen(message), &digest);
+		FIT_Base64Digest base64Digest;
+		FIT_DigestToBase64(&digest, &base64Digest);
+		FIT_RELEASE_ASSERT(strcmp(base64Digest.buffer, "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=") == 0, " Sha1 test failed");
 	}
 }
 
-typedef struct FS_Path {
-	char buffer[FS_MAX_PATH];
-} FS_Path;
+typedef struct FIT_Path {
+	char buffer[FIT_MAX_PATH];
+} FIT_Path;
 
-int FS_GetAbsolutePath(FS_Path *path, const char *relativePath) {
-	FS_SHOULD_NOT_BE_NULL(path);
-	FS_SHOULD_NOT_BE_NULL(relativePath);
+int FIT_GetAbsolutePath(FIT_Path *path, const char *relativePath) {
+	FIT_SHOULD_NOT_BE_NULL(path);
+	FIT_SHOULD_NOT_BE_NULL(relativePath);
 
-	char *newPath = _fullpath(path->buffer, relativePath, FS_MAX_PATH);
-	FS_ASSERT_LOG_RETURN(newPath, "Unable to get an absolute path for relative path [%s]", relativePath);
-	path->buffer[FS_MAX_PATH - 1] = '\0';
+	char *newPath = _fullpath(path->buffer, relativePath, FIT_MAX_PATH);
+	FIT_ASSERT_LOG_RETURN(newPath, "Unable to get an absolute path for relative path [%s]", relativePath);
+	path->buffer[FIT_MAX_PATH - 1] = '\0';
 	return 1;
 }
 
-int FS_GoUpDirectory(FS_Path *path, FS_Path *newPath) {
-	FS_SHOULD_NOT_BE_NULL(path);
-	FS_SHOULD_NOT_BE_NULL(newPath);
+int FIT_GoUpDirectory(FIT_Path *path, FIT_Path *newPath) {
+	FIT_SHOULD_NOT_BE_NULL(path);
+	FIT_SHOULD_NOT_BE_NULL(newPath);
 
 	// TODO: this is likely wrong and only works on windows. can work on later
 
-	size_t len = strnlen(path->buffer, FS_MAX_PATH);
+	size_t len = strnlen(path->buffer, FIT_MAX_PATH);
 	if (len == 0 || len == 1) return 0;
 
 	size_t index = 0;
@@ -300,88 +300,88 @@ int FS_GoUpDirectory(FS_Path *path, FS_Path *newPath) {
 	return 1;
 }
 
-int FS_AppendPath(const FS_Path *srce, const char *str, FS_Path *outPath) {
-	FS_SHOULD_NOT_BE_NULL(srce);
-	FS_SHOULD_NOT_BE_NULL(str);
-	FS_SHOULD_NOT_BE_NULL(outPath);
+int FIT_AppendPath(const FIT_Path *srce, const char *str, FIT_Path *outPath) {
+	FIT_SHOULD_NOT_BE_NULL(srce);
+	FIT_SHOULD_NOT_BE_NULL(str);
+	FIT_SHOULD_NOT_BE_NULL(outPath);
 
 	outPath->buffer[0] = '\0';
 
-	size_t len = strnlen(srce, FS_MAX_PATH);
+	size_t len = strnlen(srce, FIT_MAX_PATH);
 	size_t outIndex = 0;
 	for (size_t i = 0; i < len; i++) {
 		outPath->buffer[outIndex++] = srce->buffer[i];
 	}
-	FS_ASSERT_LOG_RETURN(outIndex < FS_MAX_PATH - 1, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
+	FIT_ASSERT_LOG_RETURN(outIndex < FIT_MAX_PATH - 1, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
 #ifdef _WIN32
 	outPath->buffer[outIndex++] = '\\';
 #else
 	outPath.buffer[outIndex++] = '/';
 #endif
-	len = strnlen(str, FS_MAX_PATH);
+	len = strnlen(str, FIT_MAX_PATH);
 	for (size_t i = 0; i < len; i++) {
-		FS_ASSERT_LOG_RETURN(outIndex < FS_MAX_PATH, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
+		FIT_ASSERT_LOG_RETURN(outIndex < FIT_MAX_PATH, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
 		outPath->buffer[outIndex++] = str[i];
 	}
 	return 1;
 }
 
-typedef struct FS_FileEntry {
+typedef struct FIT_FileEntry {
 	char *path;
 	uint32_t pathLen;
-	FS_Base64Digest hash;
+	FIT_Base64Digest hash;
 	uint64_t offset;
 	uint64_t offsetLen;
 	char *buffer;
 	uint64_t bufferLen;
 	int inSnapshot;
 
-	struct FS_FileEntry *poolNext;
-	struct FS_FileEntry *snapNext;
-	struct FS_FileEntry *snapPrev;
-	struct FS_FileEntry *trackNext;
-	struct FS_FileEntry *trackPrev;
-} FS_FileEntry;
+	struct FIT_FileEntry *poolNext;
+	struct FIT_FileEntry *snapNext;
+	struct FIT_FileEntry *snapPrev;
+	struct FIT_FileEntry *trackNext;
+	struct FIT_FileEntry *trackPrev;
+} FIT_FileEntry;
 
-typedef struct FS_Snapshot {
-	FS_FileEntry *entryHead;
-	FS_FileEntry *entryTail;
+typedef struct FIT_Snapshot {
+	FIT_FileEntry *entryHead;
+	FIT_FileEntry *entryTail;
 	uint32_t entryCount;
-	struct FS_Snapshot *next;
-	struct FS_Snapshot *prev;
-	struct FS_Snapshot *poolNext;
-} FS_Snapshot;
+	struct FIT_Snapshot *next;
+	struct FIT_Snapshot *prev;
+	struct FIT_Snapshot *poolNext;
+} FIT_Snapshot;
 
-typedef struct FS_FileStoreData {
-	FS_Snapshot *snapshotHead;
-	FS_Snapshot *snapshotTail;
-	FS_FileEntry *entryTrackingHead;
-	FS_FileEntry *entryTrackingTail;
+typedef struct FIT_FileStoreData {
+	FIT_Snapshot *snapshotHead;
+	FIT_Snapshot *snapshotTail;
+	FIT_FileEntry *entryTrackingHead;
+	FIT_FileEntry *entryTrackingTail;
 	char *buffer;
 	uint64_t bufferCount;
 	uint32_t snapshotCount;
 	uint32_t trackingCount;
-} FS_FileStoreData;
+} FIT_FileStoreData;
 
-typedef struct FS_State {
-	FS_FileStoreData fsData;
+typedef struct FIT_State {
+	FIT_FileStoreData fsData;
 
-	FS_Path workingDirectory;
-	FS_Path fileStoreAbsolutePath;
-	FS_Path trackedFileAbsolutePath;
-	FS_Path filenamePath;
+	FIT_Path workingDirectory;
+	FIT_Path fileStoreAbsolutePath;
+	FIT_Path trackedFileAbsolutePath;
+	FIT_Path filenamePath;
 
-	FS_FileEntry *entryHead;
-	FS_FileEntry *entryTail;
-	FS_Snapshot *snapHead;
-	FS_Snapshot *snapTail;
-} FS_State;
+	FIT_FileEntry *entryHead;
+	FIT_FileEntry *entryTail;
+	FIT_Snapshot *snapHead;
+	FIT_Snapshot *snapTail;
+} FIT_State;
 
-static FS_State fs_State;
+static FIT_State fs_State;
 
-void *FS_AddToSnapshotFileEntryList(FS_Snapshot *snapshot, FS_FileEntry *entry) {
-	FS_SHOULD_NOT_BE_NULL(snapshot);
-	FS_SHOULD_NOT_BE_NULL(entry);
+void *FIT_AddToSnapshotFileEntryList(FIT_Snapshot *snapshot, FIT_FileEntry *entry) {
+	FIT_SHOULD_NOT_BE_NULL(snapshot);
+	FIT_SHOULD_NOT_BE_NULL(entry);
 	if (snapshot->entryHead == NULL) {
 		snapshot->entryHead = entry;
 		snapshot->entryTail = entry;
@@ -394,15 +394,15 @@ void *FS_AddToSnapshotFileEntryList(FS_Snapshot *snapshot, FS_FileEntry *entry) 
 	snapshot->entryCount++;
 }
 
-void *FS_AddToTrackingList(FS_FileEntry *entry) {
-	FS_SHOULD_NOT_BE_NULL(entry);
+void *FIT_AddToTrackingList(FIT_FileEntry *entry) {
+	FIT_SHOULD_NOT_BE_NULL(entry);
 
 	if (fs_State.fsData.entryTrackingHead == NULL) {
 		fs_State.fsData.entryTrackingHead = entry;
 		fs_State.fsData.entryTrackingTail = entry;
 	}
 	else {
-		fs_State.fsData.entryTrackingHead->trackNext = entry;
+		fs_State.fsData.entryTrackingTail->trackNext = entry;
 		entry->trackPrev = fs_State.fsData.entryTrackingTail;
 		fs_State.fsData.entryTrackingTail = entry;
 	}
@@ -410,8 +410,8 @@ void *FS_AddToTrackingList(FS_FileEntry *entry) {
 	fs_State.fsData.trackingCount++;
 }
 
-void *FS_AddToSnapshotList(FS_Snapshot *snapshot) {
-	FS_SHOULD_NOT_BE_NULL(snapshot);
+void *FIT_AddToSnapshotList(FIT_Snapshot *snapshot) {
+	FIT_SHOULD_NOT_BE_NULL(snapshot);
 
 	if (fs_State.fsData.snapshotHead == NULL) {
 		fs_State.fsData.snapshotHead = snapshot;
@@ -425,9 +425,9 @@ void *FS_AddToSnapshotList(FS_Snapshot *snapshot) {
 	fs_State.fsData.snapshotCount++;
 }
 
-FS_Snapshot *FS_AllocateSnapshot() {
-	FS_Snapshot *snapshot = (FS_Snapshot *)calloc(1, sizeof(FS_Snapshot));
-	FS_ASSERT_LOG_RETURN(snapshot, "Out of memory, unable to allocate snapshot");
+FIT_Snapshot *FIT_AllocateSnapshot() {
+	FIT_Snapshot *snapshot = (FIT_Snapshot *)calloc(1, sizeof(FIT_Snapshot));
+	FIT_ASSERT_LOG_RETURN(snapshot, "Out of memory, unable to allocate snapshot");
 	if (fs_State.snapHead == NULL) {
 		fs_State.snapHead = snapshot;
 		fs_State.snapTail = snapshot;
@@ -439,9 +439,9 @@ FS_Snapshot *FS_AllocateSnapshot() {
 	return snapshot;
 }
 
-FS_FileEntry *FS_AllocateFileEntry() {
-	FS_FileEntry *entry = (FS_FileEntry *)calloc(1, sizeof(FS_FileEntry));
-	FS_ASSERT_LOG_RETURN(entry, "Out of memory, unable to allocate file entry");
+FIT_FileEntry *FIT_AllocateFileEntry() {
+	FIT_FileEntry *entry = (FIT_FileEntry *)calloc(1, sizeof(FIT_FileEntry));
+	FIT_ASSERT_LOG_RETURN(entry, "Out of memory, unable to allocate file entry");
 	if (fs_State.entryHead == NULL) {
 		fs_State.entryHead = entry;
 		fs_State.entryTail = entry;
@@ -453,26 +453,26 @@ FS_FileEntry *FS_AllocateFileEntry() {
 	return entry;
 }
 
-int FS_IsPathInTrackingList(const char *path) {
-	FS_SHOULD_NOT_BE_NULL(path);
-	for (FS_FileEntry *entry = fs_State.fsData.entryTrackingHead;
+int FIT_IsPathInTrackingList(const char *path) {
+	FIT_SHOULD_NOT_BE_NULL(path);
+	for (FIT_FileEntry *entry = fs_State.fsData.entryTrackingHead;
 		 entry != NULL;
 		 entry = entry->trackNext) {
-		if (strncmp(entry->path, path, FS_MAX_PATH) == 0) {
+		if (strncmp(entry->path, path, FIT_MAX_PATH) == 0) {
 			return 1;
 		}
 	}
 	return 0;
 }
 
-int FS_CopyFileEntry(FS_FileEntry *dest, FS_FileEntry *srce) {
-	FS_SHOULD_NOT_BE_NULL(dest);
-	FS_SHOULD_NOT_BE_NULL(srce);
+int FIT_CopyFileEntry(FIT_FileEntry *dest, FIT_FileEntry *srce) {
+	FIT_SHOULD_NOT_BE_NULL(dest);
+	FIT_SHOULD_NOT_BE_NULL(srce);
 
 	dest->offset = srce->offset;
-	memcpy(dest->hash.buffer, srce->hash.buffer, FS_BASE64_DIGEST_SIZE);
+	memcpy(dest->hash.buffer, srce->hash.buffer, FIT_BASE64_DIGEST_SIZE);
 	dest->path = (char *)calloc(srce->pathLen + 1, sizeof(char));
-	FS_ASSERT_LOG_RETURN(dest->path, "Out of memory in string allocation when copying file entry.");
+	FIT_ASSERT_LOG_RETURN(dest->path, "Out of memory in string allocation when copying file entry.");
 	strncpy(dest->path, srce->path, srce->pathLen);
 	dest->path[srce->pathLen] = '\0';
 	dest->pathLen = srce->pathLen;
@@ -480,243 +480,246 @@ int FS_CopyFileEntry(FS_FileEntry *dest, FS_FileEntry *srce) {
 	dest->offsetLen = srce->offsetLen;
 }
 
-int FS_AllocateFileContents(FILE *file, char **buffer, uint64_t *bufferLength) {
-	FS_SHOULD_NOT_BE_NULL(file);
-	FS_SHOULD_NOT_BE_NULL(bufferLength);
-	FS_SHOULD_NOT_BE_NULL(buffer);
+int FIT_AllocateFileContents(FILE *file, char **buffer, uint64_t *bufferLength) {
+	FIT_SHOULD_NOT_BE_NULL(file);
+	FIT_SHOULD_NOT_BE_NULL(bufferLength);
+	FIT_SHOULD_NOT_BE_NULL(buffer);
 
 	int result = 0;
 
 	result = fseek(file, 0L, SEEK_END);
-	FS_ASSERT_LOG_RETURN(result == 0, "fseek to end of file failed.");
+	FIT_ASSERT_LOG_RETURN(result == 0, "fseek to end of file failed.");
 
 	long fileSize = ftell(file);
-	FS_ASSERT_LOG_RETURN(fileSize != -1L, "ftell failed.");
+	FIT_ASSERT_LOG_RETURN(fileSize != -1L, "ftell failed.");
 
 	fseek(file, 0L, SEEK_SET);
-	FS_ASSERT_LOG_RETURN(result == 0, "fseek to start of file failed.");
+	FIT_ASSERT_LOG_RETURN(result == 0, "fseek to start of file failed.");
 	
 	*buffer = NULL;
 	if (fileSize == 0) {
 		*buffer = (char *)calloc(1, sizeof(char));
-		FS_ASSERT_LOG_RETURN(*buffer, "Unable to allocate memory for file.");
+		FIT_ASSERT_LOG_RETURN(*buffer, "Unable to allocate memory for file.");
 		(*buffer)[0] = '\0';
 		*bufferLength = 1;
 	}
 	else {
 		*buffer = (char *)calloc(fileSize, sizeof(char));
-		FS_ASSERT_LOG_RETURN(*buffer, "Unable to allocate memory for file.");
+		FIT_ASSERT_LOG_RETURN(*buffer, "Unable to allocate memory for file.");
 		result = fread(*buffer, fileSize, 1, file);
-		FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+		FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 		*bufferLength = fileSize;
 	}
 	return 1;
 }
 
-int FS_HashBuffer(FS_Base64Digest *base64Digest, char *buffer, uint64_t bufferLen) {
-	FS_SHOULD_NOT_BE_NULL(base64Digest);
+int FIT_HashBuffer(FIT_Base64Digest *base64Digest, char *buffer, uint64_t bufferLen) {
+	FIT_SHOULD_NOT_BE_NULL(base64Digest);
 
 	size_t messageLen = bufferLen;
 
-	FS_Sha1Digest digest = {0};
-	FS_DoSha1(buffer, messageLen, &digest);
-	FS_DigestToBase64(&digest, base64Digest);
+	FIT_Sha1Digest digest = {0};
+	FIT_DoSha1(buffer, messageLen, &digest);
+	FIT_DigestToBase64(&digest, base64Digest);
 
 	return 1;
 }
 
-int FS_SaveFileEntry(FILE *file, FS_FileEntry *entry) {
-	FS_SHOULD_NOT_BE_NULL(file);
-	FS_SHOULD_NOT_BE_NULL(entry);
+int FIT_SaveFileEntry(FILE *file, FIT_FileEntry *entry) {
+	FIT_SHOULD_NOT_BE_NULL(file);
+	FIT_SHOULD_NOT_BE_NULL(entry);
 
 	int result;
 
 	result = fwrite(&entry->pathLen, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
-	result = fwrite(entry->path, entry->pathLen, 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
-	result = fwrite(&entry->hash.buffer, FS_BASE64_DIGEST_SIZE, 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	result = fwrite(entry->path, entry->pathLen, 1, file);
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
+
+	result = fwrite(&entry->hash.buffer, FIT_BASE64_DIGEST_SIZE, 1, file);
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 	result = fwrite(&entry->offset, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 	result = fwrite(&entry->offsetLen, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 	return 1;
 }
 
-int FS_LoadFileEntry(FILE *file, FS_FileEntry *entry) {
-	FS_SHOULD_NOT_BE_NULL(file);
-	FS_SHOULD_NOT_BE_NULL(entry);
+int FIT_LoadFileEntry(FILE *file, FIT_FileEntry *entry) {
+	FIT_SHOULD_NOT_BE_NULL(file);
+	FIT_SHOULD_NOT_BE_NULL(entry);
 
 	int result = 0;
 
 	result = fread(&entry->pathLen, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Could not load the path length of a file entry.");
-	FS_ASSERT_LOG_RETURN(entry->pathLen && entry->pathLen < FS_MAX_PATH, "The path length of a file entry is invalid.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Could not load the path length of a file entry.");
+	FIT_ASSERT_LOG_RETURN(entry->pathLen && entry->pathLen < FIT_MAX_PATH, "The path length of a file entry is invalid [%u].", entry->pathLen);
 
 	entry->path = (char *)calloc(entry->pathLen + 1, sizeof(char));
-	FS_ASSERT_LOG_RETURN(entry->path, "Out of memory. Could not allocate string for path of file entry.");
+	FIT_ASSERT_LOG_RETURN(entry->path, "Out of memory. Could not allocate string for path of file entry.");
 
 	result = fread(entry->path, entry->pathLen, 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read path of file entry.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read path of file entry.");
 	entry->path[entry->pathLen] = '\0';
 
-	result = fread(&entry->hash.buffer, FS_BASE64_DIGEST_SIZE, 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read hash of file entry.");
-	entry->hash.buffer[FS_BASE64_DIGEST_SIZE - 1] = '\0';
+	result = fread(&entry->hash.buffer, FIT_BASE64_DIGEST_SIZE, 1, file);
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read hash of file entry.");
+	entry->hash.buffer[FIT_BASE64_DIGEST_SIZE - 1] = '\0';
 
 	result = fread(&entry->offset, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read offset of file entry.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read offset of file entry.");
 
 	result = fread(&entry->offsetLen, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read offset length of file entry.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read offset length of file entry.");
 
 	return 1;
 }
 
-int FS_SaveFileStore(FILE *file) {
-	FS_SHOULD_NOT_BE_NULL(file);
+int FIT_SaveFileStore(FILE *file) {
+	FIT_SHOULD_NOT_BE_NULL(file);
 
 	static uint32_t version = 0;
 	int result = 0;
 
 	result = fwrite(&version, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 	result = fwrite(&fs_State.fsData.snapshotCount, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
-	for (FS_Snapshot *snapshot = fs_State.fsData.snapshotHead;
+	for (FIT_Snapshot *snapshot = fs_State.fsData.snapshotHead;
 		 snapshot != NULL;
 		 snapshot = snapshot->next) {
 
 		uint32_t entryListCount = snapshot->entryCount;
 		result = fwrite(&entryListCount, sizeof(uint32_t), 1, file);
-		FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+		FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
-		for (FS_FileEntry *entry = snapshot->entryHead;
+		for (FIT_FileEntry *entry = snapshot->entryHead;
 			 entry != NULL;
 			 entry = entry->snapNext) {
-			result = FS_SaveFileEntry(file, entry);
-			FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+			result = FIT_SaveFileEntry(file, entry);
+			FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 		}
 	}
 
 	result = fwrite(&fs_State.fsData.trackingCount, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
-	for (FS_FileEntry *entry = fs_State.fsData.entryTrackingHead;
+	for (FIT_FileEntry *entry = fs_State.fsData.entryTrackingHead;
 		 entry != NULL;
 		 entry = entry->trackNext) {
-		result = FS_SaveFileEntry(file, entry);
-		FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+		result = FIT_SaveFileEntry(file, entry);
+		FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 	}
 
 	result = fwrite(&fs_State.fsData.bufferCount, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 	if (fs_State.fsData.bufferCount) {
 		result = fwrite(fs_State.fsData.buffer, fs_State.fsData.bufferCount, 1, file);
-		FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+		FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 	}
 
 	return 1;
 }
 
-int FS_LoadFileStoreFromBuffer(FILE *file) {
-	FS_SHOULD_NOT_BE_NULL(file);
+int FIT_LoadFileStoreFromBuffer(FILE *file) {
+	FIT_SHOULD_NOT_BE_NULL(file);
 
 	uint32_t version = 0;
 	int result = 0;
 
 	result = fread(&version, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to load version to file store");
-	FS_ASSERT_LOG_RETURN(version == 0, "Only version 0 supported.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to load version to file store");
+	FIT_ASSERT_LOG_RETURN(version == 0, "Only version 0 supported.");
 
 	uint32_t snapshotCount;
 	result = fread(&snapshotCount, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to load snapshot count to file store");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to load snapshot count to file store");
 
 	for (uint32_t isnap = 0; isnap < snapshotCount; isnap++) {
 
-		FS_Snapshot *snapshot = FS_AllocateSnapshot();
-		FS_ASSERT_LOG_RETURN(snapshot, "Unable to use snapshot");
+		FIT_Snapshot *snapshot = FIT_AllocateSnapshot();
+		FIT_ASSERT_LOG_RETURN(snapshot, "Unable to use snapshot");
 
-		FS_AddToSnapshotList(snapshot);
+		FIT_AddToSnapshotList(snapshot);
 
 		uint32_t entryListCount = 0;
 		result = fread(&entryListCount, sizeof(uint32_t), 1, file);
-		FS_ASSERT_LOG_RETURN(result == 1, "Unable to load file entry list count from file store");
+		FIT_ASSERT_LOG_RETURN(result == 1, "Unable to load file entry list count from file store");
 
 		for (uint32_t ientry = 0; ientry < entryListCount; ientry++) {
 
-			FS_FileEntry *entry = FS_AllocateFileEntry();
-			FS_ASSERT_LOG_RETURN(entry, "Unable to use file entry");
+			FIT_FileEntry *entry = FIT_AllocateFileEntry();
+			FIT_ASSERT_LOG_RETURN(entry, "Unable to use file entry");
 
 			entry->inSnapshot = 1;
 
-			FS_AddToSnapshotFileEntryList(snapshot, entry);
+			FIT_AddToSnapshotFileEntryList(snapshot, entry);
 
-			result = FS_LoadFileEntry(file, entry);
-			FS_ASSERT_LOG_RETURN(result == 1, "Unable to read file entry.");
+			result = FIT_LoadFileEntry(file, entry);
+			FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read file entry.");
 		}
 	}
 	
 	uint32_t trackingListCount;
 	result = fread(&trackingListCount, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read tracking list count.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read tracking list count.");
 
+	int index = 0;
 	for (uint32_t ientry = 0; ientry < trackingListCount; ientry++) {
 
-		FS_FileEntry *entry = FS_AllocateFileEntry();
-		FS_ASSERT_LOG_RETURN(entry, "Unable to use file entry");
+		FIT_FileEntry *entry = FIT_AllocateFileEntry();
+		FIT_ASSERT_LOG_RETURN(entry, "Unable to allocate file entry");
 			
-		FS_AddToTrackingList(entry);
+		FIT_AddToTrackingList(entry);
 
-		result = FS_LoadFileEntry(file, entry);
-		FS_ASSERT_LOG_RETURN(result == 1, "Unable to read file entry.");
+		result = FIT_LoadFileEntry(file, entry);
+		FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read tracking file entry [%d]. It is recommended to clear the tracking list and try again.", index);
+		index++;
 	}
 	
 	result = fread(&fs_State.fsData.bufferCount, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read the buffer count of the file store.");
-	FS_ASSERT_LOG_RETURN(fs_State.fsData.bufferCount < 100000, "Buffer count of file store is invalid.");
+	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read the buffer count of the file store.");
+	FIT_ASSERT_LOG_RETURN(fs_State.fsData.bufferCount < 100000, "Buffer count of file store is invalid.");
 
 	if (fs_State.fsData.bufferCount) {
 		fs_State.fsData.buffer = (char *)calloc(fs_State.fsData.bufferCount, sizeof(char));
-		FS_ASSERT_LOG_RETURN(fs_State.fsData.buffer, "Out of memory. Unable allocate memory for buffer when loading file store.");
+		FIT_ASSERT_LOG_RETURN(fs_State.fsData.buffer, "Out of memory. Unable allocate memory for buffer when loading file store.");
 
 		result = fread(fs_State.fsData.buffer, fs_State.fsData.bufferCount, 1, file);
-		FS_ASSERT_LOG_RETURN(result == 1, "Unable to read buffer memory of file store.");
+		FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read buffer memory of file store.");
 	}
 
 	return 1;
 }
 
-int FS_LoadFileStoreFromFile(const char *filename) {
-	FS_SHOULD_NOT_BE_NULL(filename);
+int FIT_LoadFileStoreFromFile(const char *filename) {
+	FIT_SHOULD_NOT_BE_NULL(filename);
 
 	FILE *file = fopen(filename, "rb");
-	FS_ASSERT_LOG_RETURN(file, "Unable to open file [%s]", filename);
+	FIT_ASSERT_LOG_RETURN(file, "Unable to open file [%s]", filename);
 
-	int result = FS_LoadFileStoreFromBuffer(file);
-	FS_ASSERT_LOG_RETURN(result, "Unable to load file store from buffer");
+	int result = FIT_LoadFileStoreFromBuffer(file);
+	FIT_ASSERT_LOG_RETURN(result, "Unable to load file store from buffer");
 
 	result = fclose(file);
-	FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+	FIT_ASSERT_LOG_RETURN(result == 0, "TODO");
 
 	return 1;
 }
 
-int FS_Run(int argc, char *argv[]) {
+int FIT_Run(int argc, char *argv[]) {
 
-	FS_Sha1Test();
+	FIT_Sha1Test();
 
 	if (argc <= 1) {
-		FS_LOG(
+		FIT_LOG(
 			"The FileStore is a program which takes a set of user supplied files\n"
 			"and tracks and stores snapshots of these files within an FileStore file [.fs].\n"
 			"Common usage:\n"
@@ -727,213 +730,213 @@ int FS_Run(int argc, char *argv[]) {
 	}
 
 	const char *commandStr = argv[1];
-	FS_ASSERT_LOG_RETURN(commandStr, "Error. The second argument is a NULL.");
+	FIT_ASSERT_LOG_RETURN(commandStr, "Error. The second argument is a NULL.");
 
 	// Work out what the command is.
 	const size_t MAX_COMMAND_LENGTH = 32;
 
 	size_t commandLen = strnlen(commandStr, MAX_COMMAND_LENGTH);
 
-	typedef enum FS_COMMAND {
-		FS_CREATE = 0,
-		FS_SAVE,
-		FS_TRACK,
-		FS_RESET,
-		FS_SNAPS,
-		FS_LOAD,
+	typedef enum FIT_COMMAND {
+		FIT_CREATE = 0,
+		FIT_SAVE,
+		FIT_TRACK,
+		FIT_RESET,
+		FIT_SNAPS,
+		FIT_LOAD,
 
-		FS_COMMAND_COUNT
-	} FS_COMMAND;
+		FIT_COMMAND_COUNT
+	} FIT_COMMAND;
 
-	FS_COMMAND command = FS_COMMAND_COUNT;
+	FIT_COMMAND command = FIT_COMMAND_COUNT;
 
 	if (strncmp("create", commandStr, commandLen) == 0) {
-		command = FS_CREATE;
+		command = FIT_CREATE;
 	}
 	else if (strncmp("save", commandStr, commandLen) == 0) {
-		command = FS_SAVE;
+		command = FIT_SAVE;
 	}
 	else if (strncmp("track", commandStr, commandLen) == 0) {
-		command = FS_TRACK;
+		command = FIT_TRACK;
 	}
 	else if (strncmp("reset", commandStr, commandLen) == 0) {
-		command = FS_RESET;
+		command = FIT_RESET;
 	}
 	else if (strncmp("snaps", commandStr, commandLen) == 0) {
-		command = FS_SNAPS;
+		command = FIT_SNAPS;
 	}
 	else if (strncmp("load", commandStr, commandLen) == 0) {
-		command = FS_LOAD;
+		command = FIT_LOAD;
 	}
 	else {
-		FS_LOG("This command [%s] is unrecognised. Try \"fv <cheat>\" to a see a list of useful commands, or \"fv <help>\" for some help.", commandStr);
+		FIT_LOG("This command [%s] is unrecognised. Try \"fv <cheat>\" to a see a list of useful commands, or \"fv <help>\" for some help.", commandStr);
 		return 0;
 	}
 
 	switch (command) {
-	case FS_CREATE: {
+	case FIT_CREATE: {
 		if (argc >= 2) {
 			const char *fileName = argv[2];
-			FS_ASSERT_LOG_RETURN(fileName, "Error. The third argument is a NULL.");
+			FIT_ASSERT_LOG_RETURN(fileName, "Error. The third argument is a NULL.");
 
 			// We need to append the .fv suffix;
-			char path[FS_MAX_PATH] = {0};
+			char path[FIT_MAX_PATH] = {0};
 
-			strncpy(path, fileName, FS_MAX_PATH - 1);
-			path[FS_MAX_PATH - 1] = '\0';
-			strncat(path, ".fs", FS_MAX_PATH - 1);
+			strncpy(path, fileName, FIT_MAX_PATH - 1);
+			path[FIT_MAX_PATH - 1] = '\0';
+			strncat(path, ".fit", FIT_MAX_PATH - 1);
 
 			// Check the file exists 
 			FILE *file = fopen(path, "rb");
-			FS_ASSERT_LOG_RETURN(!file, "The file [%s] already exists. So no file was created.", path);
+			FIT_ASSERT_LOG_RETURN(!file, "The file [%s] already exists. So no file was created.", path);
 
 			file = fopen(path, "wb");
-			FS_ASSERT_LOG_RETURN(file, "Unable to create [%s] file", path);
+			FIT_ASSERT_LOG_RETURN(file, "Unable to create [%s] file", path);
 
-			int result = FS_SaveFileStore(file);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+			int result = FIT_SaveFileStore(file);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 			result = fclose(file);
-			FS_ASSERT_LOG_RETURN(result == 0, "Unable to close [%s].fv file", path);
+			FIT_ASSERT_LOG_RETURN(result == 0, "Unable to close [%s].fv file", path);
 
-			FS_LOG("Sucessfully created the %s file store.", path);
+			FIT_LOG("Sucessfully created the %s file store.", path);
 		}
 		break;
 	}
-	case FS_RESET: {
+	case FIT_RESET: {
 
 		break;
 	}
-	case FS_SAVE: {
+	case FIT_SAVE: {
 
 		if (argc >= 2) {
 
 			int result;
 			{
 				const char *fileStoreStr = argv[2];
-				FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+				FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
 				// Extract the full path of the file store
-				result = FS_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
-				FS_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+				result = FIT_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
+				FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
 			}
 
-			result = FS_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
-			FS_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+			result = FIT_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
+			FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
 
-			result = FS_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
-			FS_ASSERT_LOG_RETURN(result, "Unable to load the file store [%s].", fs_State.fileStoreAbsolutePath.buffer);
+			result = FIT_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "Unable to load the file store [%s].", fs_State.fileStoreAbsolutePath.buffer);
 
 			int newChanges = 0;
 
 			if (fs_State.fsData.trackingCount || fs_State.fsData.snapshotCount) {
 
-				FS_Snapshot *snapshot = FS_AllocateSnapshot();
+				FIT_Snapshot *snapshot = FIT_AllocateSnapshot();
 
 				if (fs_State.fsData.snapshotCount == 0) {
 
-					for (FS_FileEntry *entry = fs_State.fsData.entryTrackingHead;
+					for (FIT_FileEntry *entry = fs_State.fsData.entryTrackingHead;
 						 entry != NULL;
 						 entry = entry->trackNext) {
-						FS_AddToSnapshotFileEntryList(snapshot, entry);
+						FIT_AddToSnapshotFileEntryList(snapshot, entry);
 
-						FS_LOG(" - A new file [*%s] has been added to the store.", entry->path);
+						FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
 						newChanges++;
 					}
 				}
 				else {
 
-					FS_Snapshot *lastSnapshot = fs_State.fsData.snapshotTail;
-					for (FS_FileEntry *entry = lastSnapshot->entryHead;
+					FIT_Snapshot *lastSnapshot = fs_State.fsData.snapshotTail;
+					for (FIT_FileEntry *entry = lastSnapshot->entryHead;
 						 entry != NULL;
 						 entry = entry->snapNext) {
 
-						FS_FileEntry *newEntry = FS_AllocateFileEntry();
+						FIT_FileEntry *newEntry = FIT_AllocateFileEntry();
 
-						result = FS_CopyFileEntry(newEntry, entry);
-						FS_ASSERT_LOG_RETURN(result, "Unable to create the tracked snapshot list.");
+						result = FIT_CopyFileEntry(newEntry, entry);
+						FIT_ASSERT_LOG_RETURN(result, "Unable to create the tracked snapshot list.");
 
 						newEntry->inSnapshot = 1;
 
-						FS_AddToSnapshotFileEntryList(snapshot, newEntry);
+						FIT_AddToSnapshotFileEntryList(snapshot, newEntry);
 					}
 
-					for (FS_FileEntry *entry = fs_State.fsData.entryTrackingHead;
+					for (FIT_FileEntry *entry = fs_State.fsData.entryTrackingHead;
 						 entry != NULL;
 						 entry = entry->trackNext) {
 
 						// is it in the new snapshotlist list 
 						int isInSnapList = 0;
-						for (FS_FileEntry *snapEntry = snapshot->entryHead;
+						for (FIT_FileEntry *snapEntry = snapshot->entryHead;
 							 snapEntry != NULL;
 							 snapEntry = snapEntry->snapNext) {
 
-							if (strncmp(entry->path, snapEntry->path, FS_MAX_PATH) == 0) {
+							if (strncmp(entry->path, snapEntry->path, FIT_MAX_PATH) == 0) {
 								isInSnapList = 1;
 								break;
 							}
 						}
 
 						if (!isInSnapList) {
-							FS_LOG(" - A new file [*%s] has been added to the store.", entry->path);
+							FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
 							newChanges++;
-							FS_AddToSnapshotFileEntryList(snapshot, entry);
+							FIT_AddToSnapshotFileEntryList(snapshot, entry);
 						}
 					}
 				}
 
-				for (FS_FileEntry *entry = snapshot->entryHead;
+				for (FIT_FileEntry *entry = snapshot->entryHead;
 					 entry != NULL;
 					 entry = entry->snapNext) {
 
-					result = FS_AppendPath(&fs_State.workingDirectory, entry->path, &fs_State.trackedFileAbsolutePath);
-					FS_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
+					result = FIT_AppendPath(&fs_State.workingDirectory, entry->path, &fs_State.trackedFileAbsolutePath);
+					FIT_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
 
 					FILE *file = fopen(fs_State.trackedFileAbsolutePath.buffer, "rb");
-					FS_ASSERT_LOG_RETURN(file, "TODO");
+					FIT_ASSERT_LOG_RETURN(file, "TODO");
 
-					result = FS_AllocateFileContents(file, &entry->buffer, &entry->bufferLen);
-					FS_ASSERT_LOG_RETURN(result, "TODO");
+					result = FIT_AllocateFileContents(file, &entry->buffer, &entry->bufferLen);
+					FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 					if (entry->inSnapshot) {
-						FS_Base64Digest digest = {0};
-						result = FS_HashBuffer(&digest, entry->buffer, entry->bufferLen);
-						FS_ASSERT_LOG_RETURN(result, "TODO");
+						FIT_Base64Digest digest = {0};
+						result = FIT_HashBuffer(&digest, entry->buffer, entry->bufferLen);
+						FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 						// if the hash changes then we need to save the new buffer
-						if (strncmp(digest.buffer, entry->hash.buffer, FS_MAX_PATH) != 0) {
+						if (strncmp(digest.buffer, entry->hash.buffer, FIT_MAX_PATH) != 0) {
 
-							memcpy(entry->hash.buffer, digest.buffer, FS_BASE64_DIGEST_SIZE);
+							memcpy(entry->hash.buffer, digest.buffer, FIT_BASE64_DIGEST_SIZE);
 
 							entry->offset = fs_State.fsData.bufferCount;
 							fs_State.fsData.bufferCount += entry->bufferLen;
 							entry->offsetLen = entry->bufferLen;
 
 							char *newBuffer = realloc(fs_State.fsData.buffer, fs_State.fsData.bufferCount);
-							FS_ASSERT_LOG_RETURN(newBuffer, "TODO");
+							FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
 							fs_State.fsData.buffer = newBuffer;
 							memcpy(&fs_State.fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
 
-							FS_LOG(" - A file [*%s] has changed since the last snapshot. It's new contents will be added to the store.", entry->path);
+							FIT_LOG(" - A file [*%s] has changed since the last snapshot. It's new contents will be added to the store.", entry->path);
 							newChanges++;
 						}
 					}
 					else {
-						result = FS_HashBuffer(&entry->hash, entry->buffer, entry->bufferLen);
-						FS_ASSERT_LOG_RETURN(result, "TODO");
+						result = FIT_HashBuffer(&entry->hash, entry->buffer, entry->bufferLen);
+						FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 						entry->offset = fs_State.fsData.bufferCount;
 						fs_State.fsData.bufferCount += entry->bufferLen;
 						entry->offsetLen = entry->bufferLen;
 
 						char *newBuffer = realloc(fs_State.fsData.buffer, fs_State.fsData.bufferCount);
-						FS_ASSERT_LOG_RETURN(newBuffer, "TODO");
+						FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
 						fs_State.fsData.buffer = newBuffer;
 						memcpy(&fs_State.fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
 					}
 				}
 
-				FS_AddToSnapshotList(snapshot);
+				FIT_AddToSnapshotList(snapshot);
 
 				// clear the tracking list
 				fs_State.fsData.entryTrackingHead = NULL;
@@ -941,123 +944,123 @@ int FS_Run(int argc, char *argv[]) {
 				fs_State.fsData.trackingCount = 0;
 
 				FILE *fileStore = fopen(fs_State.fileStoreAbsolutePath.buffer, "wb");
-				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fs_State.fileStoreAbsolutePath.buffer);
+				FIT_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fs_State.fileStoreAbsolutePath.buffer);
 
-				result = FS_SaveFileStore(fileStore);
-				FS_ASSERT_LOG_RETURN(result, "TODO");
+				result = FIT_SaveFileStore(fileStore);
+				FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 				result = fclose(fileStore);
-				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+				FIT_ASSERT_LOG_RETURN(result == 0, "TODO");
 
 				if (!newChanges) {
-					FS_LOG("No files have changes since the last snapshot.");
+					FIT_LOG("No files have changes since the last snapshot.");
 				}
 
-				FS_LOG("Saved new snapshot to the file store.");
+				FIT_LOG("Saved new snapshot to the file store.");
 			}
 			else {
-				FS_LOG("There are no currently tracked files that can be saved into this file store [%s]", fs_State.fileStoreAbsolutePath.buffer);
+				FIT_LOG("There are no currently tracked files that can be saved into this file store [%s]", fs_State.fileStoreAbsolutePath.buffer);
 			}
 		}
 		break;
 	}
-	case FS_TRACK: {
+	case FIT_TRACK: {
 
 		if (argc >= 3) {
 
 			int result = 0;
 			{
 				const char *fileStoreStr = argv[2];
-				FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+				FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
 				// Extract the full path of the file store
-				result = FS_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
-				FS_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+				result = FIT_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
+				FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
 			}
 
-			result = FS_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
-			FS_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+			result = FIT_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
+			FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
 
 			const char *fileTrackStr = argv[3];
-			FS_ASSERT_LOG_RETURN(fileTrackStr, "The <fileToTrack> argument is a NULL.");
+			FIT_ASSERT_LOG_RETURN(fileTrackStr, "The <fileToTrack> argument is a NULL.");
 
-			result = FS_AppendPath(&fs_State.workingDirectory, fileTrackStr, &fs_State.trackedFileAbsolutePath);
-			FS_ASSERT_LOG_RETURN(result, "Unable to append track filename to working directory path.");
+			result = FIT_AppendPath(&fs_State.workingDirectory, fileTrackStr, &fs_State.trackedFileAbsolutePath);
+			FIT_ASSERT_LOG_RETURN(result, "Unable to append track filename to working directory path.");
 			
-			result = FS_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
-			FS_ASSERT_LOG_RETURN(result, "The store [%s] could not be opened. Does it exist?", fs_State.fileStoreAbsolutePath.buffer);
+			result = FIT_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "The store [%s] could not be opened. Does it exist?", fs_State.fileStoreAbsolutePath.buffer);
 
 			// Check that the file is not already in the tracking list 
-			if (FS_IsPathInTrackingList(fileTrackStr)) {
-				FS_LOG("This file [%s] is already being tracked. Only one instance of a file can be tracked at a time.", fileTrackStr);
+			if (FIT_IsPathInTrackingList(fileTrackStr)) {
+				FIT_LOG("This file [%s] is already being tracked. Only one instance of a file can be tracked at a time.", fileTrackStr);
 			}
 			else {
 
 				FILE *fileToTrack = fopen(fs_State.trackedFileAbsolutePath.buffer, "rb");
-				FS_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to add.", fs_State.trackedFileAbsolutePath.buffer);
+				FIT_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to add.", fs_State.trackedFileAbsolutePath.buffer);
 
-				FS_FileEntry *entry = FS_AllocateFileEntry();
-				FS_ASSERT_LOG_RETURN(entry, "TODO");
+				FIT_FileEntry *entry = FIT_AllocateFileEntry();
+				FIT_ASSERT_LOG_RETURN(entry, "TODO");
 
-				size_t strLen = strnlen(fileTrackStr, FS_MAX_PATH);
-				FS_ASSERT_LOG_RETURN(strLen, "The path length of the specified tracked file is 0. This is an error.");
+				size_t strLen = strnlen(fileTrackStr, FIT_MAX_PATH);
+				FIT_ASSERT_LOG_RETURN(strLen, "The path length of the specified tracked file is 0. This is an error.");
 
 				char *str = (char *)calloc(strLen + 1, sizeof(char));
-				FS_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
+				FIT_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
 				strncpy(str, fileTrackStr, strLen);
 				str[strLen] = '\0';
 
 				entry->path = str;
 				entry->pathLen = strLen;
 
-				FS_AddToTrackingList(entry);
+				FIT_AddToTrackingList(entry);
 
 				FILE *fileStore = fopen(fs_State.fileStoreAbsolutePath.buffer, "wb");
-				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fs_State.fileStoreAbsolutePath.buffer);
+				FIT_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fs_State.fileStoreAbsolutePath.buffer);
 
-				result = FS_SaveFileStore(fileStore);
-				FS_ASSERT_LOG_RETURN(result, "TODO");
+				result = FIT_SaveFileStore(fileStore);
+				FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 				result = fclose(fileStore);
-				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+				FIT_ASSERT_LOG_RETURN(result == 0, "TODO");
 
-				FS_LOG("The file [%s] is now being tracked by the store [%s]", entry->path, fs_State.fileStoreAbsolutePath.buffer);
+				FIT_LOG("The file [%s] is now being tracked by the store [%s]", entry->path, fs_State.fileStoreAbsolutePath.buffer);
 			}
 		}
 		break;
 	}
-	case FS_LOAD: {
+	case FIT_LOAD: {
 
 		if (argc >= 3) {
 
 			int result = 0;
 			{
 				const char *fileStoreStr = argv[2];
-				FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+				FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
 				// Extract the full path of the file store
-				result = FS_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
-				FS_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+				result = FIT_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
+				FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
 			}
 
-			result = FS_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
-			FS_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+			result = FIT_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
+			FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
 
-			result = FS_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+			result = FIT_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
-			FS_Snapshot *snapshot = NULL;
+			FIT_Snapshot *snapshot = NULL;
 			long int snapIndex = 0;
 
 			if (argc >= 4) {
 				const char *snapIndexStr = argv[3];
-				FS_ASSERT_LOG_RETURN(snapIndexStr, "The <snapIndex> argument is a NULL.");
+				FIT_ASSERT_LOG_RETURN(snapIndexStr, "The <snapIndex> argument is a NULL.");
 
 				snapIndex = strtol(snapIndexStr, NULL, 0);
 
 				long int curIndex = 0;
 				// this is slow
-				for (FS_Snapshot *s = fs_State.fsData.snapshotHead;
+				for (FIT_Snapshot *s = fs_State.fsData.snapshotHead;
 					 s != NULL;
 					 s = s->next) {
 					if (curIndex++ == snapIndex) {
@@ -1065,60 +1068,77 @@ int FS_Run(int argc, char *argv[]) {
 						break;
 					}
 				}
-				FS_ASSERT_LOG_RETURN(snapshot, "The provided snapshot index does not reference any snapshot in the store.");
+				FIT_ASSERT_LOG_RETURN(snapshot, "The provided snapshot index does not reference any snapshot in the store. Omitting the index will load the latest snapshot.");
 			}
 			else {
 				snapshot = fs_State.fsData.snapshotTail;
 			}
 		
-			for (FS_FileEntry *entry = snapshot->entryHead;
+			for (FIT_FileEntry *entry = snapshot->entryHead;
 				 entry != NULL;
 				 entry = entry->snapNext) {
 
-				result = FS_AppendPath(&fs_State.workingDirectory, entry->path, &fs_State.trackedFileAbsolutePath);
-				FS_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
+				result = FIT_AppendPath(&fs_State.workingDirectory, entry->path, &fs_State.trackedFileAbsolutePath);
+				FIT_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
 
 				FILE *file = fopen(fs_State.trackedFileAbsolutePath.buffer, "wb");
-				FS_ASSERT_LOG_RETURN(file, "TODO");
+				FIT_ASSERT_LOG_RETURN(file, "TODO");
 
 				int result = fwrite(&fs_State.fsData.buffer[entry->offset], entry->offsetLen, 1, file);
-				FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+				FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 				result = fclose(file);
-				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+				FIT_ASSERT_LOG_RETURN(result == 0, "TODO");
 			}
 
 			if (snapshot == fs_State.fsData.snapshotTail) {
-				FS_Log("Successfully loaded the latest snapshot");
+				FIT_Log("Successfully loaded the latest snapshot");
 			}
 			else {
-				FS_Log("Successfully loaded snapshot %d", snapIndex);
+				FIT_Log("Successfully loaded snapshot %d", snapIndex);
 			}
 			
 		}
 
 		break;
 	}
-	case FS_SNAPS: {
+	case FIT_SNAPS: {
 
 		if (argc >= 3) {
 			const char *fileStoreStr = argv[2];
-			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+			FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			int result = FS_LoadFileStoreFromFile(fileStoreStr);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+			int result = FIT_LoadFileStoreFromFile(fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 			if (fs_State.fsData.snapshotCount) {
-				int index = fs_State.fsData.snapshotCount - 1;
-				for (FS_Snapshot *snap = fs_State.fsData.snapshotTail;
-					 snap != NULL;
-					 snap = snap->prev) {
 
-					FS_LOG("[%d] Snapshot", index--);
+				FIT_LOG(" ");
+
+				int index = 0;
+				for (FIT_Snapshot *snap = fs_State.fsData.snapshotHead;
+					 snap != NULL;
+					 snap = snap->next) {
+					
+					if (index == fs_State.fsData.snapshotCount - 1) {
+						FIT_LOG("------ Snapshot [%d] [LATEST] ------\n", index++);
+					}
+					else {
+						FIT_LOG("------ Snapshot [%d] ------\n", index++);
+					}
+			
+					for (FIT_FileEntry *entry = snap->entryHead;
+						 entry != NULL;
+						 entry = entry->snapNext) {
+						FIT_LOG(" - [%s] [%s]", entry->path, entry->hash.buffer);
+					}
+
+					FIT_LOG(" ");
 				}
+
 			}
 			else {
-				FS_LOG("There are no saved snap shots to look at.");
+				FIT_LOG("There are no saved snap shots to look at.");
 			}
 		}
 		break;
@@ -1130,7 +1150,7 @@ int FS_Run(int argc, char *argv[]) {
 
 
 int main(int argc, char *argv[]) {
-	int result = FS_Run(argc, argv);
+	int result = FIT_Run(argc, argv);
 		 
 	return result;
 };
