@@ -14,13 +14,28 @@ Features:
 - Files are only saved when they change.
 - Can specify a snapshot to load from the store.
 
-e.g.
-```c
-fit create store                // creates a file store that will be used to store and track files.
-fit track store.fit myfile1.txt // specifies we would like initially have the store.fs track the myfile1.txt file.
-fit track store.fit myfile2.txt // track more than one file
-fit save store.fit              // Takes a snapshot of all tracked files and saves them to the file store
-fit load store.fit 1            // Loads snapshot 1 from the file store into your directory.
+Common case:
+You have a set of files you are working on in a directory. Navigate to this directory
+and do:
+
+```bash
+fit create_track_all_save store  
+```
+
+This creates a file store called `store.fit`. 
+It makes this file store track all files in the directory. 
+It then saves these files into the file store.
+
+You can continue working on your files. When it comes time to save another snaphot just do 
+
+```bash
+fit save store.fit
+```
+
+You can see what files are tracked by the file store by doing.
+
+```bash
+fit tracklist store.fit
 ```
 
 Goals:
