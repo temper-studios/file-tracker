@@ -22,15 +22,17 @@ and do:
 fit create_track_all_save store  
 ```
 
-This creates a file store called `store.fit`. 
-It makes this file store track all files in the directory. 
-It then saves these files into the file store.
+This creates a `file store` called `store.fit`. 
+The `file store` is then told to track all files in the directory. 
+It then saves these files into the `file store`.
 
-You can continue working on your files. When it comes time to save another snaphot just do 
+You can continue working on your files. When it comes time to save, just do 
 
 ```bash
 fit save store.fit
 ```
+
+This saves the current state of the tracked files in the `file store`. 
 
 You can see what files are tracked by the file store by doing.
 
