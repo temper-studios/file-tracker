@@ -1,5 +1,8 @@
 # file-tracker
 Git is an actively hostile piece of software. This is the replacement.
+This recognises that command line interfaces are fundamentally stupid 
+and tries to mitigate some of the problems with them. 
+Ideally, this should be used with a GUI.
 
 This is very early days. Subject to changes.
 
