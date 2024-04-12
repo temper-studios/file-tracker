@@ -377,6 +377,33 @@ FS_FileEntry *FS_AllocateFileEntry() {
 	return entry;
 }
 
+int FS_IsPathInTrackingList(const char *path) {
+	FS_SHOULD_NOT_BE_NULL(path);
+	for (FS_FileEntry *entry = fs_State.fsData.entryTrackingHead;
+		 entry != NULL;
+		 entry = entry->trackNext) {
+		if (strncmp(entry->path, path, FS_MAX_PATH) == 0) {
+			return 1;
+		}
+	}
+	return 0;
+}
+
+int FS_CopyFileEntry(FS_FileEntry *dest, FS_FileEntry *srce) {
+	FS_SHOULD_NOT_BE_NULL(dest);
+	FS_SHOULD_NOT_BE_NULL(srce);
+
+	dest->offset = srce->offset;
+	memcpy(dest->hash.buffer, srce->hash.buffer, FS_BASE64_DIGEST_SIZE);
+	dest->path = (char *)calloc(srce->pathLen + 1, sizeof(char));
+	FS_ASSERT_LOG_RETURN(dest->path, "Out of memory in string allocation when copying file entry.");
+	strncpy(dest->path, srce->path, srce->pathLen);
+	dest->path[srce->pathLen] = '\0';
+	dest->pathLen = srce->pathLen;
+	dest->offset = srce->offset;
+	dest->offsetLen = srce->offsetLen;
+}
+
 int FS_AllocateFileContents(FILE *file, char **buffer, uint64_t *bufferLength) {
 	FS_SHOULD_NOT_BE_NULL(file);
 	FS_SHOULD_NOT_BE_NULL(bufferLength);
@@ -423,6 +450,7 @@ int FS_HashBuffer(FS_Base64Digest *base64Digest, char *buffer, uint64_t bufferLe
 }
 
 int FS_SaveFileEntry(FILE *file, FS_FileEntry *entry) {
+	FS_SHOULD_NOT_BE_NULL(file);
 	FS_SHOULD_NOT_BE_NULL(entry);
 
 	int result;
@@ -445,7 +473,9 @@ int FS_SaveFileEntry(FILE *file, FS_FileEntry *entry) {
 }
 
 int FS_LoadFileEntry(FILE *file, FS_FileEntry *entry) {
+	FS_SHOULD_NOT_BE_NULL(file);
 	FS_SHOULD_NOT_BE_NULL(entry);
+
 	int result = 0;
 
 	result = fread(&entry->pathLen, sizeof(uint32_t), 1, file);
@@ -473,6 +503,8 @@ int FS_LoadFileEntry(FILE *file, FS_FileEntry *entry) {
 }
 
 int FS_SaveFileStore(FILE *file) {
+	FS_SHOULD_NOT_BE_NULL(file);
+
 	static uint32_t version = 0;
 	int result = 0;
 
@@ -519,7 +551,9 @@ int FS_SaveFileStore(FILE *file) {
 	return 1;
 }
 
-int FS_LoadFileStore(FILE *file) {
+int FS_LoadFileStoreFromBuffer(FILE *file) {
+	FS_SHOULD_NOT_BE_NULL(file);
+
 	uint32_t version = 0;
 	int result = 0;
 
@@ -584,7 +618,21 @@ int FS_LoadFileStore(FILE *file) {
 	}
 
 	return 1;
+}
 
+int FS_LoadFileStoreFromFile(const char *filename) {
+	FS_SHOULD_NOT_BE_NULL(filename);
+
+	FILE *file = fopen(filename, "rb");
+	FS_ASSERT_LOG_RETURN(file, "Unable to open file [%s]", filename);
+
+	int result = FS_LoadFileStoreFromBuffer(file);
+	FS_ASSERT_LOG_RETURN(result, "TODO");
+
+	result = fclose(file);
+	FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+
+	return 1;
 }
 
 int FS_Run(int argc, char *argv[]) {
@@ -687,14 +735,10 @@ int FS_Run(int argc, char *argv[]) {
 			const char *fileStoreStr = argv[2];
 			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			FILE *fileStore = fopen(fileStoreStr, "rb");
-			FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
-
-			int result = FS_LoadFileStore(fileStore);
+			int result = FS_LoadFileStoreFromFile(fileStoreStr);
 			FS_ASSERT_LOG_RETURN(result, "TODO");
 
-			result = fclose(fileStore);
-			FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+			int newChanges = 0;
 
 			if (fs_State.fsData.trackingCount || fs_State.fsData.snapshotCount) {
 
@@ -706,6 +750,9 @@ int FS_Run(int argc, char *argv[]) {
 						 entry != NULL;
 						 entry = entry->trackNext) {
 						FS_AddToSnapshotFileEntryList(snapshot, entry);
+
+						FS_LOG(" - A new file [*%s] has been added to the store.", entry->path);
+						newChanges++;
 					}
 				}
 				else {
@@ -716,14 +763,10 @@ int FS_Run(int argc, char *argv[]) {
 						 entry = entry->snapNext) {
 
 						FS_FileEntry *newEntry = FS_AllocateFileEntry();
-						newEntry->offset = entry->offset;
-						memcpy(newEntry->hash.buffer, entry->hash.buffer, FS_BASE64_DIGEST_SIZE);
-						newEntry->path = (char *)calloc(entry->pathLen + 1, sizeof(char));
-						strncpy(newEntry->path, entry->path, entry->pathLen);
-						newEntry->path[entry->pathLen] = '\0';
-						newEntry->pathLen = entry->pathLen;
-						newEntry->offset = entry->offset;
-						newEntry->offsetLen = entry->offsetLen;
+
+						result = FS_CopyFileEntry(newEntry, entry);
+						FS_ASSERT_LOG_RETURN(result, "Unable to create the tracked snapshot list.");
+
 						newEntry->inSnapshot = 1;
 
 						FS_AddToSnapshotFileEntryList(snapshot, newEntry);
@@ -745,7 +788,9 @@ int FS_Run(int argc, char *argv[]) {
 							}
 						}
 
-						if (isInSnapList) {
+						if (!isInSnapList) {
+							FS_LOG(" - A new file [*%s] has been added to the store.", entry->path);
+							newChanges++;
 							FS_AddToSnapshotFileEntryList(snapshot, entry);
 						}
 					}
@@ -768,6 +813,9 @@ int FS_Run(int argc, char *argv[]) {
 
 						// if the hash changes then we need to save the new buffer
 						if (strncmp(digest.buffer, entry->hash.buffer, FS_MAX_PATH) != 0) {
+
+							memcpy(entry->hash.buffer, digest.buffer, FS_BASE64_DIGEST_SIZE);
+
 							entry->offset = fs_State.fsData.bufferCount;
 							fs_State.fsData.bufferCount += entry->bufferLen;
 							entry->offsetLen = entry->bufferLen;
@@ -776,6 +824,9 @@ int FS_Run(int argc, char *argv[]) {
 							FS_ASSERT_LOG_RETURN(newBuffer, "TODO");
 							fs_State.fsData.buffer = newBuffer;
 							memcpy(&fs_State.fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
+
+							FS_LOG(" - A file [*%s] has changed since the last snapshot. It's new contents will be added to the store.", entry->path);
+							newChanges++;
 						}
 					}
 					else {
@@ -800,7 +851,7 @@ int FS_Run(int argc, char *argv[]) {
 				fs_State.fsData.entryTrackingTail = NULL;
 				fs_State.fsData.trackingCount = 0;
 
-				fileStore = fopen(fileStoreStr, "wb");
+				FILE *fileStore = fopen(fileStoreStr, "wb");
 				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
 
 				result = FS_SaveFileStore(fileStore);
@@ -808,6 +859,10 @@ int FS_Run(int argc, char *argv[]) {
 
 				result = fclose(fileStore);
 				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+
+				if (!newChanges) {
+					FS_LOG("No files have changes since the last snapshot.");
+				}
 
 				FS_LOG("Saved new snapshot to the file store.");
 			}
@@ -830,51 +885,42 @@ int FS_Run(int argc, char *argv[]) {
 			size_t strLen = strnlen(fileTrackStr, FS_MAX_PATH);
 			FS_ASSERT_LOG_RETURN(strLen, "Unable to open the [%s] file to add.", fileTrackStr);
 
-			FILE *fileStore = fopen(fileStoreStr, "rb");
-			FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
-			
-			int result = FS_LoadFileStore(fileStore);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+			int result = FS_LoadFileStoreFromFile(fileStoreStr);
+			FS_ASSERT_LOG_RETURN(result, "The store [%s] could not be opened. Does it exist?", fileStoreStr);
 
-			result = fclose(fileStore);
-			FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+			// Check that the file is not already in the tracking list 
+			if (FS_IsPathInTrackingList(fileTrackStr)) {
+				FS_LOG("This file [%s] is already being tracked. Only one instance of a file can be tracked at a time.", fileTrackStr);
+			}
+			else {
 
-			FILE *fileToTrack = fopen(fileTrackStr, "rb");
-			FS_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to add.", fileTrackStr);
+				FILE *fileToTrack = fopen(fileTrackStr, "rb");
+				FS_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to add.", fileTrackStr);
 
-			FS_FileEntry *entry = FS_AllocateFileEntry();
-			FS_ASSERT_LOG_RETURN(entry, "TODO");
+				FS_FileEntry *entry = FS_AllocateFileEntry();
+				FS_ASSERT_LOG_RETURN(entry, "TODO");
 
-			result = FS_AllocateFileContents(fileToTrack, &entry->buffer, &entry->bufferLen);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+				char *str = (char *)calloc(strLen + 1, sizeof(char));
+				FS_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
+				strncpy(str, fileTrackStr, strLen);
+				str[strLen] = '\0';
 
-			result = FS_HashBuffer(&entry->hash, entry->buffer, entry->bufferLen);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
-				
-			char *str = (char *)calloc(strLen + 1, sizeof(char));
-			FS_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
-			strncpy(str, fileTrackStr, strLen);
-			str[strLen] = '\0';
+				entry->path = str;
+				entry->pathLen = strLen;
 
-			entry->path = str;
-			entry->pathLen = strLen;
+				FS_AddToTrackingList(entry);
 
-			FS_AddToTrackingList(entry);
+				FILE *fileStore = fopen(fileStoreStr, "wb");
+				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
 
-			fileStore = fopen(fileStoreStr, "wb");
-			FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
+				result = FS_SaveFileStore(fileStore);
+				FS_ASSERT_LOG_RETURN(result, "TODO");
 
-			result = FS_SaveFileStore(fileStore);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+				result = fclose(fileStore);
+				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
 
-			result = fclose(fileStore);
-			FS_ASSERT_LOG_RETURN(result == 0, "TODO");
-
-			
-			//result = FS_SaveWorkingAddedFileInFileStore();
-			//FS_ASSERT_LOG_RETURN(result, "Unable to save working file.");
-
-			//FS_LOG("The file [%s] was added to the working file.", node->path);
+				FS_LOG("The file [%s] is now being tracked.", entry->path);
+			}
 		}
 		break;
 	}
@@ -884,20 +930,34 @@ int FS_Run(int argc, char *argv[]) {
 			const char *fileStoreStr = argv[2];
 			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			FILE *fileStore = fopen(fileStoreStr, "rb");
-			FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
-
-			int result = FS_LoadFileStore(fileStore);
+			int result = FS_LoadFileStoreFromFile(fileStoreStr);
 			FS_ASSERT_LOG_RETURN(result, "TODO");
 
-			result = fclose(fileStore);
-			FS_ASSERT_LOG_RETURN(result == 0, "TODO");
+			FS_Snapshot *snapshot = NULL;
+			long int snapIndex = 0;
 
-			const char *snapIndexStr = argv[3];
-			FS_ASSERT_LOG_RETURN(snapIndexStr, "The <snapIndex> argument is a NULL.");
+			if (argc >= 4) {
+				const char *snapIndexStr = argv[3];
+				FS_ASSERT_LOG_RETURN(snapIndexStr, "The <snapIndex> argument is a NULL.");
 
-			FS_Snapshot *snapshot = fs_State.fsData.snapshotTail;
+				snapIndex = strtol(snapIndexStr, NULL, 0);
 
+				long int curIndex = 0;
+				// this is slow
+				for (FS_Snapshot *s = fs_State.fsData.snapshotHead;
+					 s != NULL;
+					 s = s->next) {
+					if (curIndex++ == snapIndex) {
+						snapshot = s;
+						break;
+					}
+				}
+				FS_ASSERT_LOG_RETURN(snapshot, "The provided snapshot index does not reference any snapshot in the store.");
+			}
+			else {
+				snapshot = fs_State.fsData.snapshotTail;
+			}
+		
 			for (FS_FileEntry *entry = snapshot->entryHead;
 				 entry != NULL;
 				 entry = entry->snapNext) {
@@ -911,6 +971,14 @@ int FS_Run(int argc, char *argv[]) {
 				result = fclose(file);
 				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
 			}
+
+			if (snapshot == fs_State.fsData.snapshotTail) {
+				FS_Log("Successfully loaded the latest snapshot");
+			}
+			else {
+				FS_Log("Successfully loaded snapshot %d", snapIndex);
+			}
+			
 		}
 
 		break;
@@ -921,14 +989,8 @@ int FS_Run(int argc, char *argv[]) {
 			const char *fileStoreStr = argv[2];
 			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			FILE *fileStore = fopen(fileStoreStr, "rb");
-			FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
-
-			int result = FS_LoadFileStore(fileStore);
+			int result = FS_LoadFileStoreFromFile(fileStoreStr);
 			FS_ASSERT_LOG_RETURN(result, "TODO");
-
-			result = fclose(fileStore);
-			FS_ASSERT_LOG_RETURN(result == 0, "TODO");
 
 			if (fs_State.fsData.snapshotCount) {
 				int index = fs_State.fsData.snapshotCount - 1;
