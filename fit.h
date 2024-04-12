@@ -1,6 +1,14 @@
 #pragma once
+
+// TODO: whole thing is a stream of thought to get the basic ideas down. Will need a proper refactor.
+
 #ifndef FIT_H
 #define FIT_H
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -393,7 +401,7 @@ int FIT_GoUpDirectory(FIT_Path *path, FIT_Path *newPath) {
 	}
 	newPath->buffer[0] = '\0';
 
-	for (size_t i = 0; i < index; i++) {
+	for (size_t i = 0; i <= index; i++) {
 		newPath->buffer[i] = path->buffer[i];
 	}
 
@@ -412,17 +420,12 @@ int FIT_AppendPath(const FIT_Path *srce, const char *str, FIT_Path *outPath) {
 	for (size_t i = 0; i < len; i++) {
 		outPath->buffer[outIndex++] = srce->buffer[i];
 	}
-	FIT_ASSERT_LOG_RETURN(outIndex < FIT_MAX_PATH - 1, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
-#ifdef _WIN32
-	outPath->buffer[outIndex++] = '\\';
-#else
-	outPath.buffer[outIndex++] = '/';
-#endif
 	len = strnlen(str, FIT_MAX_PATH);
 	for (size_t i = 0; i < len; i++) {
-		FIT_ASSERT_LOG_RETURN(outIndex < FIT_MAX_PATH, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
+		FIT_ASSERT_LOG_RETURN(outIndex < FIT_MAX_PATH - 1, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
 		outPath->buffer[outIndex++] = str[i];
 	}
+	outPath->buffer[outIndex] = '\0';
 	return 1;
 }
 
@@ -866,7 +869,7 @@ int FIT_LoadFileStoreFromBuffer(FIT_Context *ctx, FILE *file) {
 
 	result = fread(&ctx->fsData.bufferCount, sizeof(uint64_t), 1, file);
 	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read the buffer count of the file store.");
-	FIT_ASSERT_LOG_RETURN(ctx->fsData.bufferCount < 100000, "Buffer count of file store is invalid.");
+	FIT_ASSERT_LOG_RETURN(ctx->fsData.bufferCount < 100000000, "Buffer count of file store is invalid [%u].", ctx->fsData.bufferCount);
 
 	if (ctx->fsData.bufferCount) {
 		ctx->fsData.buffer = (char *)calloc(ctx->fsData.bufferCount, sizeof(char));
@@ -895,6 +898,239 @@ int FIT_LoadFileStoreFromFile(FIT_Context *ctx, const char *filename) {
 	FIT_ASSERT_LOG_RETURN(result == 0, "TODO");
 
 	ctx->fileStore = NULL;
+
+	return 1;
+}
+
+int FIT_LoadFileStoreAndSetWorkingDirectory(FIT_Context *ctx, const char *fileStoreStr) {
+	FIT_SHOULD_NOT_BE_NULL(ctx);
+	FIT_SHOULD_NOT_BE_NULL(fileStoreStr);
+
+	int result = 0;
+
+	// Extract the full path of the file store
+	result = FIT_GetAbsolutePath(&ctx->fileStoreAbsolutePath, fileStoreStr);
+	FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+
+	result = FIT_GoUpDirectory(&ctx->fileStoreAbsolutePath, &ctx->workingDirectory);
+	FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+
+	result = FIT_LoadFileStoreFromFile(ctx, fileStoreStr);
+	FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+	return result;
+}
+
+int FIT_TrackAll(FIT_Context *ctx, const char *fileStoreStr, size_t fileStoreStrLen) {
+	FIT_SHOULD_NOT_BE_NULL(ctx);
+	FIT_SHOULD_NOT_BE_NULL(fileStoreStr);
+
+	int result = 0;
+
+	// Go through the current directory and track all of those files.
+#ifdef _WIN32
+	{
+		// TODO: sort out all the relative, current working directory, crap. Since if I change the current directory, this wont work
+		WIN32_FIND_DATAA ffd;
+		HANDLE hFind = INVALID_HANDLE_VALUE;
+
+		// the find first file has to end with a wild card because windows is insane
+		FIT_Path wildcardPath = {0};
+		size_t pathLen = strnlen(ctx->workingDirectory.buffer, FIT_MAX_PATH - 1);
+		FIT_ASSERT_LOG_RETURN(pathLen, "TODO.");
+
+		strncpy(wildcardPath.buffer, ctx->workingDirectory.buffer, pathLen);
+		wildcardPath.buffer[pathLen] = '\0';
+		strncat(wildcardPath.buffer, "*", FIT_MAX_PATH - 1);
+
+		hFind = FindFirstFileA(wildcardPath.buffer, &ffd);
+		FIT_ASSERT_LOG_RETURN(hFind != INVALID_HANDLE_VALUE, "Unable to find first file in current directory [%d].", GetLastError());
+
+		do
+		{
+			if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			{
+				/* skip over directories */
+			}
+			else if (strncmp(ffd.cFileName, fileStoreStr, fileStoreStrLen) == 0) {
+				/* skip over the current file store */
+			}
+			else
+			{
+				result = FIT_AppendPath(&ctx->workingDirectory, ffd.cFileName, &ctx->trackedFileAbsolutePath);
+				if (!result) {
+					FindClose(hFind);
+					FIT_ASSERT_LOG_RETURN(result, "Unable to append track filename to working directory path.");
+				}
+
+				FILE *fileToTrack = fopen(ctx->trackedFileAbsolutePath.buffer, "rb");
+				if (!fileToTrack) {
+					FindClose(hFind);
+					FIT_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to track.", ctx->trackedFileAbsolutePath.buffer);
+				}
+
+				result = fclose(fileToTrack);
+				if (result != 0) {
+					FindClose(hFind);
+					FIT_ASSERT_LOG_RETURN(result == 0, "Unable to close the [%s] file.", ctx->trackedFileAbsolutePath.buffer);
+				}
+
+				if (!FIT_IsPathInTrackingList(ctx, ffd.cFileName)) {
+
+					FIT_FileEntry *entry = FIT_AllocateFileEntry(ctx);
+					FIT_ASSERT_LOG_RETURN(entry, "TODO");
+
+					size_t strLen = strnlen(ffd.cFileName, FIT_MAX_PATH);
+					FIT_ASSERT_LOG_RETURN(strLen, "The path length of the specified tracked file is 0. This is an error.");
+
+					char *str = (char *)calloc(strLen + 1, sizeof(char));
+					FIT_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
+					strncpy(str, ffd.cFileName, strLen);
+					str[strLen] = '\0';
+
+					entry->path = str;
+					entry->pathLen = strLen;
+
+					FIT_AddToTrackingList(ctx, entry);
+				}
+			}
+		} while (FindNextFileA(hFind, &ffd) != 0);
+
+		FindClose(hFind);
+	}
+#elif defined(__LINUX__)
+			// TODO:
+	FIT_ASSERT_LOG_RETURN(false, "Not implemented track all for linux.");
+#endif
+
+}
+
+int FIT_CheckFileStoreExists(FIT_Context *ctx, const char *fileName) {
+
+	// Check the file exists 
+	FILE *file = fopen(fileName, "rb");
+	if (file) {
+		fclose(file);
+		return 1;
+	}
+
+	return 0;
+}
+
+int FIT_PrepareSnapshotForSave(FIT_Context *ctx) {
+
+	int result = 0;
+	int newChanges = 0;
+
+	if (ctx->fsData.trackingCount == 0) {
+		FIT_LOG("There are no current tracked files that can be saved.");
+		return 0;
+	}
+
+	FIT_Snapshot *snapshot = FIT_AllocateSnapshot(ctx);
+
+	if (ctx->fsData.snapshotCount == 0) {
+
+		for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
+				entry != NULL;
+				entry = entry->trackNext) {
+
+			FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
+			newChanges++;
+			FIT_AddToSnapshotFileEntryList(snapshot, entry);
+		}
+	}
+	else {
+
+		FIT_Snapshot *lastSnapshot = ctx->fsData.snapshotTail;
+
+		for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
+				entry != NULL;
+				entry = entry->trackNext) {
+
+			// is it in the last snapshot list 
+			int isInSnapList = 0;
+			for (FIT_FileEntry *snapEntry = lastSnapshot->entryHead;
+					snapEntry != NULL;
+					snapEntry = snapEntry->snapNext) {
+
+				if (strncmp(entry->path, snapEntry->path, FIT_MAX_PATH) == 0) {
+					isInSnapList = 1;
+					break;
+				}
+			}
+			if (!isInSnapList) {
+				FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
+				newChanges++;
+			}
+
+			FIT_AddToSnapshotFileEntryList(snapshot, entry);
+		}
+	}
+
+	for (FIT_FileEntry *entry = snapshot->entryHead; entry != NULL;) {
+		FIT_FileEntry *entryNext = entry->snapNext;
+
+		result = FIT_AppendPath(&ctx->workingDirectory, entry->path, &ctx->trackedFileAbsolutePath);
+		FIT_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
+
+		FILE *file = fopen(ctx->trackedFileAbsolutePath.buffer, "rb");
+		if (!file) { // If we cannot open the file, then we assume the change is that this file has been deleted.
+
+			FIT_LOG(" - It appears that file [%s] has been renamed or deleted since the last snapshot.", entry->path);
+			newChanges++;
+			// remove entry from the current snapshot and track list
+			FIT_RemoveFromSnapshotFileEntryList(snapshot, entry);
+			FIT_RemoveFromTrackList(ctx, entry);
+		}
+		else {
+
+			result = FIT_AllocateFileContents(file, &entry->buffer, &entry->bufferLen);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+			if (entry->inSnapshot) {
+				FIT_Base64Digest digest = {0};
+				result = FIT_HashBuffer(&digest, entry->buffer, entry->bufferLen);
+				FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+				// if the hash changes then we need to save the new buffer
+				if (strncmp(digest.buffer, entry->hash.buffer, FIT_MAX_PATH) != 0) {
+
+					memcpy(entry->hash.buffer, digest.buffer, FIT_BASE64_DIGEST_SIZE);
+
+					entry->offset = ctx->fsData.bufferCount;
+					ctx->fsData.bufferCount += entry->bufferLen;
+					entry->offsetLen = entry->bufferLen;
+
+					char *newBuffer = realloc(ctx->fsData.buffer, ctx->fsData.bufferCount);
+					FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
+					ctx->fsData.buffer = newBuffer;
+					memcpy(&ctx->fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
+
+					FIT_LOG(" - A file [*%s] has changed since the last snapshot. It's new contents will be added to the store.", entry->path);
+					newChanges++;
+				}
+			}
+			else {
+				result = FIT_HashBuffer(&entry->hash, entry->buffer, entry->bufferLen);
+				FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+				entry->offset = ctx->fsData.bufferCount;
+				ctx->fsData.bufferCount += entry->bufferLen;
+				entry->offsetLen = entry->bufferLen;
+
+				char *newBuffer = realloc(ctx->fsData.buffer, ctx->fsData.bufferCount);
+				FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
+				ctx->fsData.buffer = newBuffer;
+				memcpy(&ctx->fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
+			}
+		}
+
+		entry = entryNext;
+	}
+
+	FIT_AddToSnapshotList(ctx, snapshot);
+
 
 	return 1;
 }
@@ -929,6 +1165,8 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 		FIT_TRACK,
 		FIT_TRACK_ALL,
 		FIT_TRACK_LIST,
+		FIT_TRACK_ALL_SAVE,
+		FIT_CREATE_TRACK_ALL_SAVE,
 		FIT_UNTRACK,
 		FIT_SNAPS,
 		FIT_LOAD,
@@ -949,7 +1187,13 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 		command = FIT_TRACK;
 	}
 	else if (strncmp("track_all", commandStr, commandLen) == 0) {
-		command = FIT_TRACK;
+		command = FIT_TRACK_ALL;
+	}
+	else if (strncmp("track_all_save", commandStr, commandLen) == 0) {
+		command = FIT_TRACK_ALL_SAVE;
+	}
+	else if (strncmp("create_track_all_save", commandStr, commandLen) == 0) {
+		command = FIT_CREATE_TRACK_ALL_SAVE;
 	}
 	else if (strncmp("tracklist", commandStr, commandLen) == 0) {
 		command = FIT_TRACK_LIST;
@@ -974,21 +1218,13 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 			const char *fileName = argv[2];
 			FIT_ASSERT_LOG_RETURN(fileName, "Error. The third argument is a NULL.");
 
-			// We need to append the .fv suffix;
-			char path[FIT_MAX_PATH] = {0};
+			int result = FIT_CheckFileStoreExists(ctx, fileName);
+			FIT_ASSERT_LOG_RETURN(!result, "This file store already exists %s", fileName);
 
-			strncpy(path, fileName, FIT_MAX_PATH - 1);
-			path[FIT_MAX_PATH - 1] = '\0';
-			strncat(path, ".fit", FIT_MAX_PATH - 1);
-
-			// Check the file exists 
-			FILE *file = fopen(path, "rb");
-			FIT_ASSERT_LOG_RETURN(!file, "The file [%s] already exists. So no file was created.", path);
-
-			int result = FIT_SaveFileStoreFromFile(ctx, path);
+			result = FIT_SaveFileStoreFromFile(ctx, fileName);
 			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
-			FIT_LOG("Sucessfully created the %s file store.", path);
+			FIT_LOG("Sucessfully created the %s file store.", fileName);
 		}
 		break;
 	}
@@ -1079,146 +1315,30 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 		if (argc >= 2) {
 
 			int result;
-			{
-				const char *fileStoreStr = argv[2];
-				FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-				// Extract the full path of the file store
-				result = FIT_GetAbsolutePath(&ctx->fileStoreAbsolutePath, fileStoreStr);
-				FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
-			}
+			const char *fileStoreStr = argv[2];
+			FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			result = FIT_GoUpDirectory(&ctx->fileStoreAbsolutePath, &ctx->workingDirectory);
-			FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
-
-			result = FIT_LoadFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
-			FIT_ASSERT_LOG_RETURN(result, "Unable to load the file store [%s].", ctx->fileStoreAbsolutePath.buffer);
+			result = FIT_LoadFileStoreAndSetWorkingDirectory(ctx, fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(result, "TODO.");
 
 			int newChanges = 0;
 
+			result = FIT_PrepareSnapshotForSave(ctx);
+			FIT_ASSERT_LOG_RETURN(result, "TODO.");
+
 			FIT_LOG(" ");
 
-			if (ctx->fsData.trackingCount) {
+			result = FIT_SaveFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
-				FIT_Snapshot *snapshot = FIT_AllocateSnapshot(ctx);
+			FIT_LOG(" ");
 
-				if (ctx->fsData.snapshotCount == 0) {
-
-					for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
-						 entry != NULL;
-						 entry = entry->trackNext) {
-
-						FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
-						newChanges++;
-						FIT_AddToSnapshotFileEntryList(snapshot, entry);
-					}
-				}
-				else {
-
-					FIT_Snapshot *lastSnapshot = ctx->fsData.snapshotTail;
-
-					for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
-						 entry != NULL;
-						 entry = entry->trackNext) {
-
-						// is it in the last snapshot list 
-						int isInSnapList = 0;
-						for (FIT_FileEntry *snapEntry = lastSnapshot->entryHead;
-							 snapEntry != NULL;
-							 snapEntry = snapEntry->snapNext) {
-
-							if (strncmp(entry->path, snapEntry->path, FIT_MAX_PATH) == 0) {
-								isInSnapList = 1;
-								break;
-							}
-						}
-						if (!isInSnapList) {
-							FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
-							newChanges++;
-						}
-
-						FIT_AddToSnapshotFileEntryList(snapshot, entry);
-					}
-				}
-
-				for (FIT_FileEntry *entry = snapshot->entryHead; entry != NULL;) {
-					FIT_FileEntry *entryNext = entry->snapNext;
-
-					result = FIT_AppendPath(&ctx->workingDirectory, entry->path, &ctx->trackedFileAbsolutePath);
-					FIT_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
-
-					FILE *file = fopen(ctx->trackedFileAbsolutePath.buffer, "rb");
-					if (!file) { // If we cannot open the file, then we assume the change is that this file has been deleted.
-
-						FIT_LOG(" - It appears that file [%s] has been renamed or deleted since the last snapshot.", entry->path);
-						newChanges++;
-						// remove entry from the current snapshot and track list
-						FIT_RemoveFromSnapshotFileEntryList(snapshot, entry);
-						FIT_RemoveFromTrackList(ctx, entry);
-					}
-					else {
-
-						result = FIT_AllocateFileContents(file, &entry->buffer, &entry->bufferLen);
-						FIT_ASSERT_LOG_RETURN(result, "TODO");
-
-						if (entry->inSnapshot) {
-							FIT_Base64Digest digest = {0};
-							result = FIT_HashBuffer(&digest, entry->buffer, entry->bufferLen);
-							FIT_ASSERT_LOG_RETURN(result, "TODO");
-
-							// if the hash changes then we need to save the new buffer
-							if (strncmp(digest.buffer, entry->hash.buffer, FIT_MAX_PATH) != 0) {
-
-								memcpy(entry->hash.buffer, digest.buffer, FIT_BASE64_DIGEST_SIZE);
-
-								entry->offset = ctx->fsData.bufferCount;
-								ctx->fsData.bufferCount += entry->bufferLen;
-								entry->offsetLen = entry->bufferLen;
-
-								char *newBuffer = realloc(ctx->fsData.buffer, ctx->fsData.bufferCount);
-								FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
-								ctx->fsData.buffer = newBuffer;
-								memcpy(&ctx->fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
-
-								FIT_LOG(" - A file [*%s] has changed since the last snapshot. It's new contents will be added to the store.", entry->path);
-								newChanges++;
-							}
-						}
-						else {
-							result = FIT_HashBuffer(&entry->hash, entry->buffer, entry->bufferLen);
-							FIT_ASSERT_LOG_RETURN(result, "TODO");
-
-							entry->offset = ctx->fsData.bufferCount;
-							ctx->fsData.bufferCount += entry->bufferLen;
-							entry->offsetLen = entry->bufferLen;
-
-							char *newBuffer = realloc(ctx->fsData.buffer, ctx->fsData.bufferCount);
-							FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
-							ctx->fsData.buffer = newBuffer;
-							memcpy(&ctx->fsData.buffer[entry->offset], entry->buffer, entry->offsetLen);
-						}
-					}
-
-					entry = entryNext;
-				}
-
-				FIT_AddToSnapshotList(ctx, snapshot);
-
-				result = FIT_SaveFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
-				FIT_ASSERT_LOG_RETURN(result, "TODO");
-
-				FIT_LOG(" ");
-
-				if (!newChanges) {
-					FIT_LOG("No files have changes since the last snapshot.");
-				}
-
-				FIT_LOG("Saved snapshot [%d] to the file store.\n", ctx->fsData.snapshotCount - 1);
-
+			if (!newChanges) {
+				FIT_LOG("No files have changes since the last snapshot.");
 			}
-			else {
-				FIT_LOG("There are no currently tracked files that can be saved into this file store [%s]\n", ctx->fileStoreAbsolutePath.buffer);
-			}
+
+			FIT_LOG("Saved snapshot [%d] to the file store.\n", ctx->fsData.snapshotCount - 1);
 		}
 		break;
 	}
@@ -1251,6 +1371,9 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 			FILE *fileToTrack = fopen(ctx->trackedFileAbsolutePath.buffer, "rb");
 			FIT_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to track.", ctx->trackedFileAbsolutePath.buffer);
 
+			result = fclose(fileToTrack);
+			FIT_ASSERT_LOG_RETURN(result == 0, "Unable to close the [%s] file.", ctx->trackedFileAbsolutePath.buffer);
+
 			// Check that the file is not already in the tracking list 
 			if (FIT_IsPathInTrackingList(ctx, fileTrackStr)) {
 				FIT_LOG("This file [%s] is already being tracked. Only one instance of a file can be tracked at a time.", fileTrackStr);
@@ -1281,63 +1404,94 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 		}
 		break;
 	}
+	case FIT_TRACK_ALL_SAVE: {
+
+		if (argc >= 3) {
+
+			int result = 0;
+
+			const char *fileStoreStr = argv[2];
+			FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+
+			size_t fileStoreStrLen = strnlen(fileStoreStr, FIT_MAX_PATH);
+			FIT_ASSERT_LOG_RETURN(fileStoreStrLen, "The <fileStore> length is 0.");
+
+			result = FIT_LoadFileStoreAndSetWorkingDirectory(ctx, fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+			result = FIT_TrackAll(ctx, fileStoreStr, fileStoreStrLen);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+			result = FIT_PrepareSnapshotForSave(ctx);
+			FIT_ASSERT_LOG_RETURN(result, "TODO.");
+
+			result = FIT_SaveFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+		}
+
+		break;
+	}
+	case FIT_CREATE_TRACK_ALL_SAVE: {
+
+		if (argc >= 3) {
+
+			int result = 0;
+
+			const char *fileStoreStr = argv[2];
+			FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+
+			size_t fileStoreStrLen = strnlen(fileStoreStr, FIT_MAX_PATH);
+			FIT_ASSERT_LOG_RETURN(fileStoreStrLen, "The <fileStore> length is 0.");
+
+			result = FIT_CheckFileStoreExists(ctx, fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(!result, "This file store already exists %s", fileStoreStr);
+
+			result = FIT_SaveFileStoreFromFile(ctx, fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+			result = FIT_LoadFileStoreAndSetWorkingDirectory(ctx, fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+			result = FIT_TrackAll(ctx, fileStoreStr, fileStoreStrLen);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+
+			result = FIT_PrepareSnapshotForSave(ctx);
+			FIT_ASSERT_LOG_RETURN(result, "TODO.");
+
+			result = FIT_SaveFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+		}
+
+		break;
+	}
 	case FIT_TRACK_ALL: {
 
-		//if (argc >= 3) {
+		if (argc >= 3) {
 
-		//	int result = 0;
-		//	{
-		//		const char *fileStoreStr = argv[2];
-		//		FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+			int result = 0;
+			
+			const char *fileStoreStr = argv[2];
+			FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-		//		// Extract the full path of the file store
-		//		result = FIT_GetAbsolutePath(&ctx->fileStoreAbsolutePath, fileStoreStr);
-		//		FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
-		//	}
+			size_t fileStoreStrLen = strnlen(fileStoreStr, FIT_MAX_PATH);
+			FIT_ASSERT_LOG_RETURN(fileStoreStrLen, "The <fileStore> length is 0.");
 
-		//	result = FIT_GoUpDirectory(&ctx->fileStoreAbsolutePath, &ctx->workingDirectory);
-		//	FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+			result = FIT_LoadFileStoreAndSetWorkingDirectory(ctx, fileStoreStr);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
-		//	const char *fileTrackStr = argv[3];
-		//	FIT_ASSERT_LOG_RETURN(fileTrackStr, "The <fileToTrack> argument is a NULL.");
+			result = FIT_TrackAll(ctx, fileStoreStr, fileStoreStrLen);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
-		//	result = FIT_AppendPath(&ctx->workingDirectory, fileTrackStr, &ctx->trackedFileAbsolutePath);
-		//	FIT_ASSERT_LOG_RETURN(result, "Unable to append track filename to working directory path.");
+			for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
+				 entry != NULL;
+				 entry = entry->trackNext) {
 
-		//	result = FIT_LoadFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
-		//	FIT_ASSERT_LOG_RETURN(result, "The store [%s] could not be opened. Does it exist?", ctx->fileStoreAbsolutePath.buffer);
+				FIT_LOG(" - Tracking [%s]", entry->path);
+			}
 
-		//	FILE *fileToTrack = fopen(ctx->trackedFileAbsolutePath.buffer, "rb");
-		//	FIT_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to track.", ctx->trackedFileAbsolutePath.buffer);
-
-		//	// Check that the file is not already in the tracking list 
-		//	if (FIT_IsPathInTrackingList(ctx, fileTrackStr)) {
-		//		FIT_LOG("This file [%s] is already being tracked. Only one instance of a file can be tracked at a time.", fileTrackStr);
-		//	}
-		//	else {
-
-		//		FIT_FileEntry *entry = FIT_AllocateFileEntry(ctx);
-		//		FIT_ASSERT_LOG_RETURN(entry, "TODO");
-
-		//		size_t strLen = strnlen(fileTrackStr, FIT_MAX_PATH);
-		//		FIT_ASSERT_LOG_RETURN(strLen, "The path length of the specified tracked file is 0. This is an error.");
-
-		//		char *str = (char *)calloc(strLen + 1, sizeof(char));
-		//		FIT_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
-		//		strncpy(str, fileTrackStr, strLen);
-		//		str[strLen] = '\0';
-
-		//		entry->path = str;
-		//		entry->pathLen = strLen;
-
-		//		FIT_AddToTrackingList(ctx, entry);
-
-		//		result = FIT_SaveFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
-		//		FIT_ASSERT_LOG_RETURN(result, "TODO");
-
-		//		FIT_LOG("The file [%s] is now being tracked by the store [%s]", entry->path, ctx->fileStoreAbsolutePath.buffer);
-		//	}
-		//}
+			result = FIT_SaveFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
+			FIT_ASSERT_LOG_RETURN(result, "TODO");
+		}
 		break;
 	}
 	case FIT_LOAD: {
@@ -1345,19 +1499,14 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 		if (argc >= 3) {
 
 			int result = 0;
-			{
-				const char *fileStoreStr = argv[2];
-				FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-				// Extract the full path of the file store
-				result = FIT_GetAbsolutePath(&ctx->fileStoreAbsolutePath, fileStoreStr);
-				FIT_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
-			}
+			const char *fileStoreStr = argv[2];
+			FIT_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			result = FIT_GoUpDirectory(&ctx->fileStoreAbsolutePath, &ctx->workingDirectory);
-			FIT_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+			size_t fileStoreStrLen = strnlen(fileStoreStr, FIT_MAX_PATH);
+			FIT_ASSERT_LOG_RETURN(fileStoreStrLen, "The <fileStore> length is 0.");
 
-			result = FIT_LoadFileStoreFromFile(ctx, ctx->fileStoreAbsolutePath.buffer);
+			result = FIT_LoadFileStoreAndSetWorkingDirectory(ctx, fileStoreStr);
 			FIT_ASSERT_LOG_RETURN(result, "TODO");
 
 			FIT_Snapshot *snapshot = NULL;
