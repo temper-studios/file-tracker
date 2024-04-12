@@ -255,6 +255,77 @@ fs_can_abort FS_Sha1Test() {
 	}
 }
 
+typedef struct FS_Path {
+	char buffer[FS_MAX_PATH];
+} FS_Path;
+
+int FS_GetAbsolutePath(FS_Path *path, const char *relativePath) {
+	FS_SHOULD_NOT_BE_NULL(path);
+	FS_SHOULD_NOT_BE_NULL(relativePath);
+
+	char *newPath = _fullpath(path->buffer, relativePath, FS_MAX_PATH);
+	FS_ASSERT_LOG_RETURN(newPath, "Unable to get an absolute path for relative path [%s]", relativePath);
+	path->buffer[FS_MAX_PATH - 1] = '\0';
+	return 1;
+}
+
+int FS_GoUpDirectory(FS_Path *path, FS_Path *newPath) {
+	FS_SHOULD_NOT_BE_NULL(path);
+	FS_SHOULD_NOT_BE_NULL(newPath);
+
+	// TODO: this is likely wrong and only works on windows. can work on later
+
+	size_t len = strnlen(path->buffer, FS_MAX_PATH);
+	if (len == 0 || len == 1) return 0;
+
+	size_t index = 0;
+	// find last backslash
+	for (index = len - 1; index; index--) {
+#ifdef _WIN32
+		if (path->buffer[index] == '\\') {
+			break;
+		}
+#else 
+		if (path->buffer[index] == '/') {
+			break;
+		}
+#endif
+	}
+	newPath->buffer[0] = '\0';
+
+	for (size_t i = 0; i < index; i++) {
+		newPath->buffer[i] = path->buffer[i];
+	}
+	
+	return 1;
+}
+
+int FS_AppendPath(const FS_Path *srce, const char *str, FS_Path *outPath) {
+	FS_SHOULD_NOT_BE_NULL(srce);
+	FS_SHOULD_NOT_BE_NULL(str);
+	FS_SHOULD_NOT_BE_NULL(outPath);
+
+	outPath->buffer[0] = '\0';
+
+	size_t len = strnlen(srce, FS_MAX_PATH);
+	size_t outIndex = 0;
+	for (size_t i = 0; i < len; i++) {
+		outPath->buffer[outIndex++] = srce->buffer[i];
+	}
+	FS_ASSERT_LOG_RETURN(outIndex < FS_MAX_PATH - 1, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
+#ifdef _WIN32
+	outPath->buffer[outIndex++] = '\\';
+#else
+	outPath.buffer[outIndex++] = '/';
+#endif
+	len = strnlen(str, FS_MAX_PATH);
+	for (size_t i = 0; i < len; i++) {
+		FS_ASSERT_LOG_RETURN(outIndex < FS_MAX_PATH, "Path size exceeded when attempting to append [%s] to [%s]", str, srce);
+		outPath->buffer[outIndex++] = str[i];
+	}
+	return 1;
+}
+
 typedef struct FS_FileEntry {
 	char *path;
 	uint32_t pathLen;
@@ -294,7 +365,12 @@ typedef struct FS_FileStoreData {
 
 typedef struct FS_State {
 	FS_FileStoreData fsData;
-	uint64_t offset;
+
+	FS_Path workingDirectory;
+	FS_Path fileStoreAbsolutePath;
+	FS_Path trackedFileAbsolutePath;
+	FS_Path filenamePath;
+
 	FS_FileEntry *entryHead;
 	FS_FileEntry *entryTail;
 	FS_Snapshot *snapHead;
@@ -479,25 +555,25 @@ int FS_LoadFileEntry(FILE *file, FS_FileEntry *entry) {
 	int result = 0;
 
 	result = fread(&entry->pathLen, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
-	FS_ASSERT_LOG_RETURN(entry->pathLen && entry->pathLen < FS_MAX_PATH, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Could not load the path length of a file entry.");
+	FS_ASSERT_LOG_RETURN(entry->pathLen && entry->pathLen < FS_MAX_PATH, "The path length of a file entry is invalid.");
 
 	entry->path = (char *)calloc(entry->pathLen + 1, sizeof(char));
-	FS_ASSERT_LOG_RETURN(entry->path, "TODO");
+	FS_ASSERT_LOG_RETURN(entry->path, "Out of memory. Could not allocate string for path of file entry.");
 
 	result = fread(entry->path, entry->pathLen, 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read path of file entry.");
 	entry->path[entry->pathLen] = '\0';
 
 	result = fread(&entry->hash.buffer, FS_BASE64_DIGEST_SIZE, 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read hash of file entry.");
 	entry->hash.buffer[FS_BASE64_DIGEST_SIZE - 1] = '\0';
 
 	result = fread(&entry->offset, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read offset of file entry.");
 
 	result = fread(&entry->offsetLen, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read offset length of file entry.");
 
 	return 1;
 }
@@ -586,13 +662,13 @@ int FS_LoadFileStoreFromBuffer(FILE *file) {
 			FS_AddToSnapshotFileEntryList(snapshot, entry);
 
 			result = FS_LoadFileEntry(file, entry);
-			FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+			FS_ASSERT_LOG_RETURN(result == 1, "Unable to read file entry.");
 		}
 	}
 	
 	uint32_t trackingListCount;
 	result = fread(&trackingListCount, sizeof(uint32_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read tracking list count.");
 
 	for (uint32_t ientry = 0; ientry < trackingListCount; ientry++) {
 
@@ -602,19 +678,19 @@ int FS_LoadFileStoreFromBuffer(FILE *file) {
 		FS_AddToTrackingList(entry);
 
 		result = FS_LoadFileEntry(file, entry);
-		FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+		FS_ASSERT_LOG_RETURN(result == 1, "Unable to read file entry.");
 	}
 	
 	result = fread(&fs_State.fsData.bufferCount, sizeof(uint64_t), 1, file);
-	FS_ASSERT_LOG_RETURN(result == 1, "TODO");
-	FS_ASSERT_LOG_RETURN(fs_State.fsData.bufferCount < 100000, "TODO");
+	FS_ASSERT_LOG_RETURN(result == 1, "Unable to read the buffer count of the file store.");
+	FS_ASSERT_LOG_RETURN(fs_State.fsData.bufferCount < 100000, "Buffer count of file store is invalid.");
 
 	if (fs_State.fsData.bufferCount) {
 		fs_State.fsData.buffer = (char *)calloc(fs_State.fsData.bufferCount, sizeof(char));
-		FS_ASSERT_LOG_RETURN(fs_State.fsData.buffer, "TODO");
+		FS_ASSERT_LOG_RETURN(fs_State.fsData.buffer, "Out of memory. Unable allocate memory for buffer when loading file store.");
 
 		result = fread(fs_State.fsData.buffer, fs_State.fsData.bufferCount, 1, file);
-		FS_ASSERT_LOG_RETURN(result == 1, "TODO");
+		FS_ASSERT_LOG_RETURN(result == 1, "Unable to read buffer memory of file store.");
 	}
 
 	return 1;
@@ -627,7 +703,7 @@ int FS_LoadFileStoreFromFile(const char *filename) {
 	FS_ASSERT_LOG_RETURN(file, "Unable to open file [%s]", filename);
 
 	int result = FS_LoadFileStoreFromBuffer(file);
-	FS_ASSERT_LOG_RETURN(result, "TODO");
+	FS_ASSERT_LOG_RETURN(result, "Unable to load file store from buffer");
 
 	result = fclose(file);
 	FS_ASSERT_LOG_RETURN(result == 0, "TODO");
@@ -712,7 +788,7 @@ int FS_Run(int argc, char *argv[]) {
 			FS_ASSERT_LOG_RETURN(!file, "The file [%s] already exists. So no file was created.", path);
 
 			file = fopen(path, "wb");
-			FS_ASSERT_LOG_RETURN(file, "Unable to create[%s].fs file", path);
+			FS_ASSERT_LOG_RETURN(file, "Unable to create [%s] file", path);
 
 			int result = FS_SaveFileStore(file);
 			FS_ASSERT_LOG_RETURN(result, "TODO");
@@ -732,11 +808,21 @@ int FS_Run(int argc, char *argv[]) {
 
 		if (argc >= 2) {
 
-			const char *fileStoreStr = argv[2];
-			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+			int result;
+			{
+				const char *fileStoreStr = argv[2];
+				FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			int result = FS_LoadFileStoreFromFile(fileStoreStr);
-			FS_ASSERT_LOG_RETURN(result, "TODO");
+				// Extract the full path of the file store
+				result = FS_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
+				FS_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+			}
+
+			result = FS_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
+			FS_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+
+			result = FS_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
+			FS_ASSERT_LOG_RETURN(result, "Unable to load the file store [%s].", fs_State.fileStoreAbsolutePath.buffer);
 
 			int newChanges = 0;
 
@@ -800,7 +886,10 @@ int FS_Run(int argc, char *argv[]) {
 					 entry != NULL;
 					 entry = entry->snapNext) {
 
-					FILE *file = fopen(entry->path, "rb");
+					result = FS_AppendPath(&fs_State.workingDirectory, entry->path, &fs_State.trackedFileAbsolutePath);
+					FS_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
+
+					FILE *file = fopen(fs_State.trackedFileAbsolutePath.buffer, "rb");
 					FS_ASSERT_LOG_RETURN(file, "TODO");
 
 					result = FS_AllocateFileContents(file, &entry->buffer, &entry->bufferLen);
@@ -851,8 +940,8 @@ int FS_Run(int argc, char *argv[]) {
 				fs_State.fsData.entryTrackingTail = NULL;
 				fs_State.fsData.trackingCount = 0;
 
-				FILE *fileStore = fopen(fileStoreStr, "wb");
-				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
+				FILE *fileStore = fopen(fs_State.fileStoreAbsolutePath.buffer, "wb");
+				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fs_State.fileStoreAbsolutePath.buffer);
 
 				result = FS_SaveFileStore(fileStore);
 				FS_ASSERT_LOG_RETURN(result, "TODO");
@@ -867,7 +956,7 @@ int FS_Run(int argc, char *argv[]) {
 				FS_LOG("Saved new snapshot to the file store.");
 			}
 			else {
-				FS_LOG("There are no currently tracked files that can be saved into this file store");
+				FS_LOG("There are no currently tracked files that can be saved into this file store [%s]", fs_State.fileStoreAbsolutePath.buffer);
 			}
 		}
 		break;
@@ -876,17 +965,27 @@ int FS_Run(int argc, char *argv[]) {
 
 		if (argc >= 3) {
 
-			const char *fileStoreStr = argv[2];
-			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+			int result = 0;
+			{
+				const char *fileStoreStr = argv[2];
+				FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+
+				// Extract the full path of the file store
+				result = FS_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
+				FS_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+			}
+
+			result = FS_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
+			FS_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
 
 			const char *fileTrackStr = argv[3];
 			FS_ASSERT_LOG_RETURN(fileTrackStr, "The <fileToTrack> argument is a NULL.");
 
-			size_t strLen = strnlen(fileTrackStr, FS_MAX_PATH);
-			FS_ASSERT_LOG_RETURN(strLen, "Unable to open the [%s] file to add.", fileTrackStr);
-
-			int result = FS_LoadFileStoreFromFile(fileStoreStr);
-			FS_ASSERT_LOG_RETURN(result, "The store [%s] could not be opened. Does it exist?", fileStoreStr);
+			result = FS_AppendPath(&fs_State.workingDirectory, fileTrackStr, &fs_State.trackedFileAbsolutePath);
+			FS_ASSERT_LOG_RETURN(result, "Unable to append track filename to working directory path.");
+			
+			result = FS_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
+			FS_ASSERT_LOG_RETURN(result, "The store [%s] could not be opened. Does it exist?", fs_State.fileStoreAbsolutePath.buffer);
 
 			// Check that the file is not already in the tracking list 
 			if (FS_IsPathInTrackingList(fileTrackStr)) {
@@ -894,11 +993,14 @@ int FS_Run(int argc, char *argv[]) {
 			}
 			else {
 
-				FILE *fileToTrack = fopen(fileTrackStr, "rb");
-				FS_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to add.", fileTrackStr);
+				FILE *fileToTrack = fopen(fs_State.trackedFileAbsolutePath.buffer, "rb");
+				FS_ASSERT_LOG_RETURN(fileToTrack, "Unable to open the [%s] file to add.", fs_State.trackedFileAbsolutePath.buffer);
 
 				FS_FileEntry *entry = FS_AllocateFileEntry();
 				FS_ASSERT_LOG_RETURN(entry, "TODO");
+
+				size_t strLen = strnlen(fileTrackStr, FS_MAX_PATH);
+				FS_ASSERT_LOG_RETURN(strLen, "The path length of the specified tracked file is 0. This is an error.");
 
 				char *str = (char *)calloc(strLen + 1, sizeof(char));
 				FS_ASSERT_LOG_RETURN(str, "Out of memory. Unable to allocate string.");
@@ -910,8 +1012,8 @@ int FS_Run(int argc, char *argv[]) {
 
 				FS_AddToTrackingList(entry);
 
-				FILE *fileStore = fopen(fileStoreStr, "wb");
-				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fileStoreStr);
+				FILE *fileStore = fopen(fs_State.fileStoreAbsolutePath.buffer, "wb");
+				FS_ASSERT_LOG_RETURN(fileStore, "Unable to open file [%s]", fs_State.fileStoreAbsolutePath.buffer);
 
 				result = FS_SaveFileStore(fileStore);
 				FS_ASSERT_LOG_RETURN(result, "TODO");
@@ -919,7 +1021,7 @@ int FS_Run(int argc, char *argv[]) {
 				result = fclose(fileStore);
 				FS_ASSERT_LOG_RETURN(result == 0, "TODO");
 
-				FS_LOG("The file [%s] is now being tracked.", entry->path);
+				FS_LOG("The file [%s] is now being tracked by the store [%s]", entry->path, fs_State.fileStoreAbsolutePath.buffer);
 			}
 		}
 		break;
@@ -927,10 +1029,21 @@ int FS_Run(int argc, char *argv[]) {
 	case FS_LOAD: {
 
 		if (argc >= 3) {
-			const char *fileStoreStr = argv[2];
-			FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
 
-			int result = FS_LoadFileStoreFromFile(fileStoreStr);
+			int result = 0;
+			{
+				const char *fileStoreStr = argv[2];
+				FS_ASSERT_LOG_RETURN(fileStoreStr, "The <fileStore> argument is a NULL.");
+
+				// Extract the full path of the file store
+				result = FS_GetAbsolutePath(&fs_State.fileStoreAbsolutePath, fileStoreStr);
+				FS_ASSERT_LOG_RETURN(result, "Unable to get the absolute path for the file store.");
+			}
+
+			result = FS_GoUpDirectory(&fs_State.fileStoreAbsolutePath, &fs_State.workingDirectory);
+			FS_ASSERT_LOG_RETURN(result, "Unable to get the working directory for the file store.");
+
+			result = FS_LoadFileStoreFromFile(fs_State.fileStoreAbsolutePath.buffer);
 			FS_ASSERT_LOG_RETURN(result, "TODO");
 
 			FS_Snapshot *snapshot = NULL;
@@ -962,7 +1075,10 @@ int FS_Run(int argc, char *argv[]) {
 				 entry != NULL;
 				 entry = entry->snapNext) {
 
-				FILE *file = fopen(entry->path, "wb");
+				result = FS_AppendPath(&fs_State.workingDirectory, entry->path, &fs_State.trackedFileAbsolutePath);
+				FS_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
+
+				FILE *file = fopen(fs_State.trackedFileAbsolutePath.buffer, "wb");
 				FS_ASSERT_LOG_RETURN(file, "TODO");
 
 				int result = fwrite(&fs_State.fsData.buffer[entry->offset], entry->offsetLen, 1, file);
