@@ -73,7 +73,7 @@ typedef struct FIT_FileEntry {
 	uint64_t offsetLen;
 	char *buffer;
 	uint64_t bufferLen;
-	int inSnapshot;
+	uint8_t inSnapshot;
 
 	struct FIT_FileEntry *poolNext;
 	struct FIT_FileEntry *snapNext;
@@ -705,6 +705,9 @@ int FIT_SaveFileEntry(FILE *file, FIT_FileEntry *entry) {
 	result = fwrite(&entry->offsetLen, sizeof(uint64_t), 1, file);
 	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
+	result = fwrite(&entry->inSnapshot, sizeof(uint8_t), 1, file);
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
+
 	return 1;
 }
 
@@ -734,6 +737,9 @@ int FIT_LoadFileEntry(FILE *file, FIT_FileEntry *entry) {
 
 	result = fread(&entry->offsetLen, sizeof(uint64_t), 1, file);
 	FIT_ASSERT_LOG_RETURN(result == 1, "Unable to read offset length of file entry.");
+
+	result = fread(&entry->inSnapshot, sizeof(uint8_t), 1, file);
+	FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
 
 	return 1;
 }
@@ -1023,50 +1029,24 @@ int FIT_PrepareSnapshotForSave(FIT_Context *ctx) {
 	int newChanges = 0;
 
 	if (ctx->fsData.trackingCount == 0) {
-		FIT_LOG("There are no current tracked files that can be saved.");
+		FIT_LOG("There are no tracked files that can be saved.");
 		return 0;
 	}
 
 	FIT_Snapshot *snapshot = FIT_AllocateSnapshot(ctx);
 
-	if (ctx->fsData.snapshotCount == 0) {
+	for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
+			entry != NULL;
+			entry = entry->trackNext) {
 
-		for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
-				entry != NULL;
-				entry = entry->trackNext) {
-
+		if (!entry->inSnapshot) {
 			FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
 			newChanges++;
-			FIT_AddToSnapshotFileEntryList(snapshot, entry);
 		}
+
+		FIT_AddToSnapshotFileEntryList(snapshot, entry);
 	}
-	else {
-
-		FIT_Snapshot *lastSnapshot = ctx->fsData.snapshotTail;
-
-		for (FIT_FileEntry *entry = ctx->fsData.entryTrackingHead;
-				entry != NULL;
-				entry = entry->trackNext) {
-
-			// is it in the last snapshot list 
-			int isInSnapList = 0;
-			for (FIT_FileEntry *snapEntry = lastSnapshot->entryHead;
-					snapEntry != NULL;
-					snapEntry = snapEntry->snapNext) {
-
-				if (strncmp(entry->path, snapEntry->path, FIT_MAX_PATH) == 0) {
-					isInSnapList = 1;
-					break;
-				}
-			}
-			if (!isInSnapList) {
-				FIT_LOG(" - A new file [*%s] has been added to the store.", entry->path);
-				newChanges++;
-			}
-
-			FIT_AddToSnapshotFileEntryList(snapshot, entry);
-		}
-	}
+	
 
 	for (FIT_FileEntry *entry = snapshot->entryHead; entry != NULL;) {
 		FIT_FileEntry *entryNext = entry->snapNext;
@@ -1118,6 +1098,7 @@ int FIT_PrepareSnapshotForSave(FIT_Context *ctx) {
 				entry->offset = ctx->fsData.bufferCount;
 				ctx->fsData.bufferCount += entry->bufferLen;
 				entry->offsetLen = entry->bufferLen;
+				entry->inSnapshot = 1;
 
 				char *newBuffer = realloc(ctx->fsData.buffer, ctx->fsData.bufferCount);
 				FIT_ASSERT_LOG_RETURN(newBuffer, "TODO");
@@ -1130,7 +1111,6 @@ int FIT_PrepareSnapshotForSave(FIT_Context *ctx) {
 	}
 
 	FIT_AddToSnapshotList(ctx, snapshot);
-
 
 	return 1;
 }
@@ -1542,7 +1522,7 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 				FIT_ASSERT_LOG_RETURN(result, "Unable to append entry relative path to working directory path.");
 
 				FILE *file = fopen(ctx->trackedFileAbsolutePath.buffer, "wb");
-				FIT_ASSERT_LOG_RETURN(file, "TODO");
+				FIT_ASSERT_LOG_RETURN(file, "Unable to open file %s", ctx->trackedFileAbsolutePath.buffer);
 
 				int result = fwrite(&ctx->fsData.buffer[entry->offset], entry->offsetLen, 1, file);
 				FIT_ASSERT_LOG_RETURN(result == 1, "TODO");
@@ -1587,10 +1567,11 @@ int FIT_Run(FIT_Context *ctx, int argc, char *argv[]) {
 						FIT_LOG("------ %s | Snapshot [%d] ------\n", fileStoreStr, index++);
 					}
 
+					int entryIndex = 0;
 					for (FIT_FileEntry *entry = snap->entryHead;
 						 entry != NULL;
 						 entry = entry->snapNext) {
-						FIT_LOG(" - [%s] [%s]", entry->path, entry->hash.buffer);
+						FIT_LOG(" - [%d] [%s] [%s]", entryIndex++, entry->path, entry->hash.buffer);
 					}
 
 					FIT_LOG(" ");
