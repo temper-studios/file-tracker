@@ -1,7 +1,10 @@
-# file-tracker
+# file-tracker (fit)
 Git is an actively hostile piece of software. This is the replacement.
+The hotter, better looking, cousin of git.
+
 This recognises that command line interfaces are fundamentally stupid 
 and tries to mitigate some of the problems with them. 
+
 Ideally, this should be used with a GUI.
 
 This is very early days. Subject to changes.
@@ -13,11 +16,11 @@ Features:
 
 e.g.
 ```c
-ft create store               // creates a file store that will be used to store and track files.
-ft track store.fs myfile1.txt // specifies we would like initially have the store.fs track the myfile1.txt file.
-ft track store.fs myfile2.txt // track more than one file
-ft save store.fs              // Takes a snapshot of all tracked files and saves them to the file store
-ft load store.fs 1            // Loads snapshot 1 from the file store into your directory.
+fit create store                // creates a file store that will be used to store and track files.
+fit track store.fit myfile1.txt // specifies we would like initially have the store.fs track the myfile1.txt file.
+fit track store.fit myfile2.txt // track more than one file
+fit save store.fit              // Takes a snapshot of all tracked files and saves them to the file store
+fit load store.fit 1            // Loads snapshot 1 from the file store into your directory.
 ```
 
 Goals:
